@@ -83,14 +83,17 @@ class FLauncherApp extends StatelessWidget {
           title: 'FLauncher',
           theme: ThemeData(
             brightness: Brightness.dark,
+            useMaterial3: false, // keep upstream's Material 2 look on current Flutter
             primarySwatch: _swatch,
-            // ignore: deprecated_member_use
-            accentColor: _swatch[200],
+            colorScheme: ColorScheme.fromSwatch(
+              primarySwatch: _swatch,
+              accentColor: _swatch[200],
+              backgroundColor: _swatch[400],
+              brightness: Brightness.dark,
+            ),
             cardColor: _swatch[300],
             canvasColor: _swatch[300],
             dialogBackgroundColor: _swatch[400],
-            // ignore: deprecated_member_use
-            backgroundColor: _swatch[400],
             scaffoldBackgroundColor: _swatch[400],
             textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: Colors.white)),
             appBarTheme: AppBarTheme(elevation: 0, backgroundColor: Colors.transparent),
