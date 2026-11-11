@@ -16,8 +16,7 @@
   ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
   -->
 
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="me.efesser.flauncher">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-feature
         android:name="android.hardware.touchscreen"
@@ -42,7 +41,7 @@
         android:banner="@drawable/banner"
         android:fullBackupContent="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="FLauncher">
+        android:label="FLauncher HA">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -55,17 +54,13 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
-            <meta-data
-                android:name="firebase_crashlytics_collection_enabled"
-                android:value="false" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.HOME" />
+                <!-- kronie-ha fork, test phase: no HOME/DEFAULT category, so installing this never
+                     displaces the user's current launcher. Re-add both when it becomes the home app. -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-                <category android:name="android.intent.category.LAUNCHER_APP" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
