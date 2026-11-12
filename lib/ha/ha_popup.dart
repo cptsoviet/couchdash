@@ -7,18 +7,39 @@
 import 'package:flauncher/ha/ha_panel.dart';
 import 'package:flauncher/ha/ha_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-void showHaPopup(BuildContext context, Map<String, dynamic> card) => showDialog(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (_) => ChangeNotifierProvider.value(value: context.read<HaService>(), child: _HaPopup(card)),
-    );
+bool _isSelectKey(LogicalKeyboardKey k) =>
+    k == LogicalKeyboardKey.select || k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.gameButtonA;
+
+/// Opened by a long press, OK is usually still held: its key repeats and the release would "press" the
+/// popup's first button. So the popup stays disarmed until OK has been released once.
+void showHaPopup(BuildContext context, Map<String, dynamic> card) {
+  var armed = !HardwareKeyboard.instance.logicalKeysPressed.any(_isSelectKey);
+  bool watcher(KeyEvent e) {
+    if (e is KeyUpEvent && _isSelectKey(e.logicalKey)) {
+      // arm after this release has been dispatched
+      Future.microtask(() => armed = true);
+      HardwareKeyboard.instance.removeHandler(watcher);
+    }
+    return false;
+  }
+
+  if (!armed) HardwareKeyboard.instance.addHandler(watcher);
+  showDialog(
+    context: context,
+    barrierColor: Colors.black54,
+    builder: (_) => ChangeNotifierProvider.value(
+        value: context.read<HaService>(), child: _HaPopup(card, () => armed)),
+  ).whenComplete(() => HardwareKeyboard.instance.removeHandler(watcher));
+}
 
 class _HaPopup extends StatelessWidget {
   final Map<String, dynamic> card;
+  final bool Function() isArmed;
 
-  _HaPopup(this.card);
+  _HaPopup(this.card, this.isArmed);
 
   @override
   Widget build(BuildContext context) {
@@ -197,11 +218,16 @@ class _PopupButton extends StatefulWidget {
 class _PopupButtonState extends State<_PopupButton> {
   bool _focused = false;
 
+  void _press() {
+    final popup = context.findAncestorWidgetOfExactType<_HaPopup>();
+    if (popup == null || popup.isArmed()) widget.onPressed();
+  }
+
   @override
   Widget build(BuildContext context) => InkWell(
         autofocus: widget.autofocus,
         onFocusChange: (f) => setState(() => _focused = f),
-        onTap: widget.onPressed,
+        onTap: _press,
         focusColor: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
