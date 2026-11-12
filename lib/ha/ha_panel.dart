@@ -27,6 +27,7 @@ class HaPanel extends StatelessWidget {
         for (final card in ha.cards) {
           switch (card["type"]) {
             case "glance":
+              if (_isHeaderCard(card)) break; // "Outdoors"/"Indoors" glance cards feed the top bar instead
               for (final e in (card["entities"] as List?) ?? []) {
                 final entry = e is String ? {"entity": e} : Map<String, dynamic>.from(e);
                 // weather goes next to the clock (HaWeatherInline), not into the pill row
@@ -51,7 +52,7 @@ class HaPanel extends StatelessWidget {
                 Padding(
                   padding: EdgeInsets.only(left: 8, bottom: 8),
                   child: Wrap(spacing: 10, runSpacing: 8, children: [
-                    if (!ha.connected) _Pill(text: ha.error ?? "Home Assistant offline", dot: Colors.redAccent),
+                    if (!ha.connected) _Pill(text: ha.error ?? "Home Assistant offline", icon: Icons.cloud_off, iconColor: Colors.redAccent),
                     for (final p in pills) _EntityPill(p),
                   ]),
                 ),
@@ -92,6 +93,18 @@ String _num(dynamic v) {
   return d == d.roundToDouble() || d.abs() >= 10 ? d.round().toString() : d.toStringAsFixed(1);
 }
 
+// "%" and temperatures attach directly; F/C get a degree sign; anything else is spaced
+String _unit(String unit) {
+  if (unit == "%" || unit.startsWith("°")) return unit;
+  if (unit == "F" || unit == "C") return "°$unit";
+  return " $unit";
+}
+
+bool _isHeaderCard(Map<String, dynamic> card) {
+  final t = "${card["title"] ?? ""}".trim().toLowerCase();
+  return card["type"] == "glance" && (t == "outdoors" || t == "indoors");
+}
+
 String formatState(Map<String, dynamic>? state) {
   if (state == null) return "Unknown";
   final s = "${state["state"]}";
@@ -116,7 +129,7 @@ String formatState(Map<String, dynamic>? state) {
       return s == "on" ? "On" : "Off";
     case "sensor":
       final unit = a["unit_of_measurement"];
-      return unit == null ? _cap(s) : "${_num(s)}${unit == "%" ? "%" : unit.toString().startsWith("°") ? "°" : " $unit"}";
+      return unit == null ? _cap(s) : "${_num(s)}${_unit(unit.toString())}";
     default:
       return _cap(s);
   }
@@ -172,11 +185,11 @@ const _weather = <String, (String, IconData)>{
 
 class _Pill extends StatelessWidget {
   final String text;
-  final Color? dot;
+  final String? value; // shown bold after "text: "
   final IconData? icon;
-  final String? trailing;
+  final Color? iconColor;
 
-  _Pill({required this.text, this.dot, this.icon, this.trailing});
+  _Pill({required this.text, this.value, this.icon, this.iconColor});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -187,13 +200,14 @@ class _Pill extends StatelessWidget {
           border: Border.all(color: Color(0x1FFFFFFF)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (dot != null) ...[Icon(Icons.circle, size: 8, color: dot), SizedBox(width: 6)],
-          Text(text, style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.9))),
-          if (icon != null) ...[SizedBox(width: 6), Icon(icon, size: 15, color: Colors.white)],
-          if (trailing != null) ...[
-            SizedBox(width: 6),
-            Text(trailing!, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          ],
+          if (icon != null) ...[Icon(icon, size: 15, color: iconColor ?? Colors.white70), SizedBox(width: 6)],
+          Text.rich(
+            TextSpan(children: [
+              TextSpan(text: value == null ? text : "$text: "),
+              if (value != null) TextSpan(text: value, style: TextStyle(fontWeight: FontWeight.w700)),
+            ]),
+            style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.92)),
+          ),
         ]),
       );
 }
@@ -205,21 +219,34 @@ class _EntityPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.select<HaService, Map<String, dynamic>?>((ha) => ha.states[entry["entity"]]);
+    final entityId = "${entry["entity"]}";
+    final state = context.select<HaService, Map<String, dynamic>?>((ha) => ha.states[entityId]);
     final s = state?["state"];
-    if ("${entry["entity"]}".startsWith("weather.") && state != null) {
-      final w = _weather[s] ?? (_cap("$s"), Icons.cloud_outlined);
-      final a = state["attributes"] ?? {};
-      final t = a["temperature"];
-      final unit = "${a["temperature_unit"] ?? "°F"}";
-      return _Pill(text: w.$1, icon: w.$2, trailing: t == null ? null : "${(t as num).round()}$unit");
-    }
-    final Color? dot = s == "locked" || s == "off" && "${entry["entity"]}".startsWith("binary_sensor.")
-        ? Colors.greenAccent
-        : s == "unlocked" || s == "on" && "${entry["entity"]}".startsWith("binary_sensor.")
-            ? Colors.orangeAccent
-            : null;
-    return _Pill(text: "${_name(entry, state)}: ${formatState(state)}", dot: dot);
+    final deviceClass = state?["attributes"]?["device_class"];
+    final domain = entityId.split(".").first;
+    // secure/closed = green, unlocked/open = orange
+    final good = s == "locked" || (domain == "binary_sensor" && s == "off");
+    final bad = s == "unlocked" || s == "jammed" || (domain == "binary_sensor" && s == "on");
+    final IconData icon = switch (domain) {
+      "lock" => s == "unlocked" ? Icons.lock_open : Icons.lock_outline,
+      "binary_sensor" => switch (deviceClass) {
+          "window" => Icons.window_outlined,
+          "garage_door" => Icons.garage_outlined,
+          "door" || "opening" => s == "on" ? Icons.door_front_door_outlined : Icons.door_front_door,
+          _ => Icons.sensors,
+        },
+      _ => _icon(entityId, state),
+    };
+    return _Pill(
+      text: _name(entry, state),
+      value: formatState(state),
+      icon: icon,
+      iconColor: good
+          ? Colors.greenAccent
+          : bad
+              ? Colors.orangeAccent
+              : null,
+    );
   }
 }
 
@@ -436,36 +463,124 @@ class _ButtonTile extends StatelessWidget {
   }
 }
 
-/// Weather shown left of the clock in the top-right pill: "Clear ☾ 81°F".
-/// Uses the first weather.* entity in the dashboard's glance cards, so it is chosen in HA.
-class HaWeatherInline extends StatelessWidget {
+/// Top bar left of the clock: [weather] {AQI} | Indoors: 81°F 35% {AQI} |
+/// Driven by the dashboard's glance cards titled "Outdoors" and "Indoors" (entity order is kept).
+/// Without an "Outdoors" card it falls back to the first weather.* entity in any glance card.
+class HaHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ha = context.watch<HaService>();
-    String? entityId;
-    for (final card in ha.cards.where((c) => c["type"] == "glance")) {
-      for (final e in (card["entities"] as List?) ?? []) {
-        final id = "${e is String ? e : e["entity"]}";
-        if (id.startsWith("weather.")) {
-          entityId ??= id;
+    List<String> entitiesOf(String title) {
+      for (final c in ha.cards) {
+        if (c["type"] == "glance" && "${c["title"] ?? ""}".trim().toLowerCase() == title) {
+          return [for (final e in (c["entities"] as List?) ?? []) "${e is String ? e : e["entity"]}"];
+        }
+      }
+      return [];
+    }
+
+    var outdoors = entitiesOf("outdoors");
+    if (outdoors.isEmpty) {
+      for (final c in ha.cards.where((c) => c["type"] == "glance")) {
+        for (final e in (c["entities"] as List?) ?? []) {
+          final id = "${e is String ? e : e["entity"]}";
+          if (id.startsWith("weather.") && outdoors.isEmpty) outdoors = [id];
         }
       }
     }
-    final state = entityId == null ? null : ha.states[entityId];
-    if (state == null) return SizedBox();
-    final s = "${state["state"]}";
-    final w = _weather[s] ?? (_cap(s), Icons.cloud_outlined);
-    final a = state["attributes"] ?? {};
-    final t = a["temperature"];
+    final indoors = entitiesOf("indoors");
     final style = Theme.of(context).textTheme.titleLarge!.copyWith(fontWeight: FontWeight.w400);
+
+    List<Widget> segment(List<String> ids) => [
+          for (final id in ids)
+            // hidden while unknown/unavailable (e.g. the Winix purifier is off)
+            if (ha.states[id] != null && !{"unknown", "unavailable"}.contains(ha.states[id]!["state"])) ...[
+              _headerItem(ha.states[id]!, style),
+              SizedBox(width: 10)
+            ],
+        ];
+
+    final out = segment(outdoors);
+    final ins = segment(indoors);
+    Widget divider() => Padding(
+        padding: EdgeInsets.only(left: 6, right: 16), child: Container(width: 1, height: 22, color: Colors.white24));
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Text(w.$1, style: style.copyWith(color: Colors.white70)),
-      SizedBox(width: 8),
-      Icon(w.$2, size: 22),
-      if (t != null) ...[SizedBox(width: 8), Text("${(t as num).round()}${a["temperature_unit"] ?? "°F"}", style: style)],
-      SizedBox(width: 16),
-      Container(width: 1, height: 22, color: Colors.white24),
-      SizedBox(width: 16),
+      ...out,
+      if (out.isNotEmpty) divider(),
+      if (ins.isNotEmpty) ...[Text("Indoors:", style: style.copyWith(color: Colors.white70)), SizedBox(width: 10), ...ins],
+      if (ins.isNotEmpty) divider(),
     ]);
+  }
+
+  Widget _headerItem(Map<String, dynamic> state, TextStyle style) {
+    final id = "${state["entity_id"]}";
+    final a = Map<String, dynamic>.from(state["attributes"] ?? {});
+    final s = "${state["state"]}";
+    if (id.startsWith("weather.")) {
+      final w = _weather[s] ?? (_cap(s), Icons.cloud_outlined);
+      final t = a["temperature"];
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(w.$1, style: style.copyWith(color: Colors.white70)),
+        SizedBox(width: 8),
+        Icon(w.$2, size: 22),
+        if (t != null) ...[
+          SizedBox(width: 8),
+          Text("${(t as num).round()}${_unit("${a["temperature_unit"] ?? "°F"}")}", style: style),
+        ],
+      ]);
+    }
+    final isAqi = a["device_class"] == "aqi" ||
+        id.contains("aqi") ||
+        id.contains("air_quality") ||
+        "${a["friendly_name"] ?? ""}".toLowerCase().contains("air quality");
+    if (isAqi) return _AqiBadge(s);
+    return Text(formatState(state), style: style);
+  }
+}
+
+/// AQI badge: numbers coloured by US EPA band, or text levels (good/fair/poor...).
+class _AqiBadge extends StatelessWidget {
+  final String value;
+
+  _AqiBadge(this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    final n = double.tryParse(value);
+    final Color color;
+    final String label;
+    if (n != null) {
+      label = "AQI ${n.round()}";
+      color = n <= 50
+          ? Color(0xFF3DDC84)
+          : n <= 100
+              ? Color(0xFFFFD54F)
+              : n <= 150
+                  ? Color(0xFFFF9800)
+                  : n <= 200
+                      ? Color(0xFFF44336)
+                      : n <= 300
+                          ? Color(0xFF9C27B0)
+                          : Color(0xFF7E0023);
+    } else {
+      final v = value.toLowerCase();
+      label = "AQI ${_cap(v)}";
+      color = v.contains("good") || v == "excellent"
+          ? Color(0xFF3DDC84)
+          : v.contains("fair") || v.contains("moderate")
+              ? Color(0xFFFFD54F)
+              : v.contains("poor") || v.contains("bad") || v.contains("unhealthy")
+                  ? Color(0xFFF44336)
+                  : Colors.white54;
+    }
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.7)),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+    );
   }
 }
