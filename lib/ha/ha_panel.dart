@@ -224,10 +224,14 @@ class _EntityPill extends StatelessWidget {
     final s = state?["state"];
     final deviceClass = state?["attributes"]?["device_class"];
     final domain = entityId.split(".").first;
-    // secure/closed = green, unlocked/open = orange
-    final good = s == "locked" || (domain == "binary_sensor" && s == "off");
-    final bad = s == "unlocked" || s == "jammed" || (domain == "binary_sensor" && s == "on");
-    final IconData icon = switch (domain) {
+    // secure/closed/"All good" = green, unlocked/open/"N issues" = amber
+    final text = "$s".toLowerCase();
+    final summary = domain == "sensor" && (text == "all good" || text.contains("issue"));
+    final good = s == "locked" || (domain == "binary_sensor" && s == "off") || (summary && text == "all good");
+    final bad = s == "unlocked" || s == "jammed" || (domain == "binary_sensor" && s == "on") || (summary && !good);
+    final IconData icon = summary
+        ? (good ? Icons.check_circle_outline : Icons.warning_amber_rounded)
+        : switch (domain) {
       "lock" => s == "unlocked" ? Icons.lock_open : Icons.lock_outline,
       "binary_sensor" => switch (deviceClass) {
           "window" => Icons.window_outlined,
@@ -236,7 +240,7 @@ class _EntityPill extends StatelessWidget {
           _ => Icons.sensors,
         },
       _ => _icon(entityId, state),
-    };
+          };
     return _Pill(
       text: _name(entry, state),
       value: formatState(state),
