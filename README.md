@@ -168,6 +168,31 @@ Purple Glow, AT4K Dark, Great Whale, …* (see `lib/gradients.dart`). Set it fro
 → **Wallpaper from Home Assistant** lets HA choose (on by default) and sets the fade time. An unknown value falls back
 to the wallpaper picked on the TV.
 
+## 4e. Optional: HA notifications over any app
+
+The launcher can register as an HA **mobile_app device** (the same API the Companion app uses). HA then gets `notify.mobile_app_<device_name>`, and its messages are drawn on top of whatever is playing.
+1. Allow drawing over other apps (Android TV has no settings screen for it):
+   `adb shell appops set net.kronie.flauncher_ha SYSTEM_ALERT_WINDOW allow`
+2. In `ha.json` add `"notifications": true` (optional: `"device_name": "Living Room TV"`, `"offline_max_age_minutes": 10`). Push it again, then restart the app (`am force-stop`, open it). On first start it registers; the device appears in HA under Mobile App.
+3. Send from HA:
+```yaml
+action: notify.mobile_app_living_room_tv
+data:
+  title: "Someone's at the door"
+  message: Doorbell pressed
+  data:
+    image: /api/camera_proxy/camera.front_door   # or camera: camera.x (refreshes every 2 s), or any URL
+    actions: [{action: UNLOCK, title: Unlock}, {action: DISMISS, title: Dismiss}]
+    tts: true             # speak title + message (or tts_text: "...")
+    duration: 20          # seconds, 0 = until dismissed (default 10, or 30 with buttons)
+    priority: critical    # centred, dims the screen, repeats speech every 30 s until answered
+    tag: doorbell         # same tag replaces; message "clear_notification" + tag removes it
+    chip: true            # small persistent pill instead of a card; with countdown_until: <ISO time>
+```
+Buttons fire `mobile_app_notification_action` (with `action`, `tag`), like phone notifications. A card without buttons never takes the remote's focus. Messages that arrive while the TV is asleep are shown on wake if they are still younger than `offline_max_age_minutes`. The overlay is drawn by a native foreground service (`android/.../HaNotifyService.kt`, `HaOverlay.kt`), so it works while other apps are in front.
+
+Local test without HA: `tools/notify-test.sh <tv-ip:5555> grant|card|actions|critical|chip|tts|clear`.
+
 ## 5. Make it the home screen
 
 The test builds can be opened from any launcher. To make FLauncher HA the home app:

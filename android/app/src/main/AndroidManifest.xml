@@ -28,6 +28,11 @@
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- kronie-ha fork: Home Assistant over the LAN (plain http to HA) -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- HA notifications drawn over other apps (granted via adb appops), kept alive as a foreground service -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
         <intent>
@@ -71,5 +76,24 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <service
+            android:name=".HaNotifyService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Home Assistant notification overlay" />
+        </service>
+        <receiver android:name=".HaBootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+        <!-- adb-only test hook: DUMP is held by the shell, not by apps -->
+        <receiver android:name=".HaTestReceiver" android:exported="true" android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="net.kronie.flauncher_ha.TEST_NOTIFY" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

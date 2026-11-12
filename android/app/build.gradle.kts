@@ -57,3 +57,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // HA notification service: WebSocket push channel + webhook
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+}

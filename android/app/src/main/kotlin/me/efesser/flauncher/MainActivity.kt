@@ -46,6 +46,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        HaNotifyService.start(this) // FLauncher HA: notification overlay service (idle unless enabled in ha.json)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getApplications" -> result.success(getApplications())
