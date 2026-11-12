@@ -21,6 +21,7 @@ import 'dart:convert';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/providers/wallpaper_service.dart';
 import 'package:flauncher/widgets/settings/gradient_panel_page.dart';
+import 'package:flauncher/widgets/settings/mood_panel_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -43,6 +44,16 @@ class WallpaperPanelPage extends StatelessWidget {
               ],
             ),
             onPressed: () => Navigator.of(context).pushNamed(GradientPanelPage.routeName),
+          ),
+          TextButton(
+            child: Row(
+              children: [
+                Icon(Icons.nightlight_round),
+                Container(width: 8),
+                Text("Mood wallpaper (Home Assistant)", style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+            onPressed: () => Navigator.of(context).pushNamed(MoodPanelPage.routeName),
           ),
           TextButton(
             child: Row(

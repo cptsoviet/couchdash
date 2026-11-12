@@ -32,6 +32,7 @@ class HaPanel extends StatelessWidget {
               }
               break;
             case "tile":
+            case "button": // stand-alone button card (one stacked after a tile is a popup option instead)
               tiles.add(card);
               break;
             case "picture-entity":
@@ -63,7 +64,11 @@ class HaPanel extends StatelessWidget {
                       for (final t in tiles)
                         Padding(
                           padding: EdgeInsets.only(right: 16),
-                          child: t["type"] == "tile" ? _HaTile(t) : _CameraTile(t),
+                          child: t["type"] == "tile"
+                              ? _HaTile(t)
+                              : t["type"] == "button"
+                                  ? _ButtonTile(t)
+                                  : _CameraTile(t),
                         ),
                     ],
                   ),
@@ -348,6 +353,50 @@ class _CameraTileState extends State<_CameraTile> {
               style: TextStyle(fontSize: 12, shadows: [Shadow(color: Colors.black, blurRadius: 6)])),
         ),
       ]),
+    );
+  }
+}
+
+/// Stand-alone HA button card: name plus an action, e.g. "All off". OK = tap_action, hold = hold_action.
+class _ButtonTile extends StatelessWidget {
+  final Map<String, dynamic> card;
+
+  _ButtonTile(this.card);
+
+  @override
+  Widget build(BuildContext context) {
+    final entityId = card["entity"] as String?;
+    final state = context.select<HaService, Map<String, dynamic>?>((ha) => entityId == null ? null : ha.states[entityId]);
+    final svc = "${card["tap_action"]?["perform_action"] ?? card["tap_action"]?["service"] ?? ""}";
+    void run(String key, String fallback) {
+      final action = card[key] == null ? null : Map<String, dynamic>.from(card[key]);
+      context.read<HaService>().runAction(action, entityId, fallback: fallback);
+    }
+
+    return _TileFrame(
+      active: _isActive(state),
+      onSelect: () => run("tap_action", entityId != null ? "toggle" : "none"),
+      onHold: () => run("hold_action", "none"),
+      builder: (_) => Padding(
+        padding: EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Icon(
+                entityId != null
+                    ? _icon(entityId, state)
+                    : svc.endsWith("turn_off")
+                        ? Icons.power_settings_new
+                        : svc.startsWith("scene.")
+                            ? Icons.palette_outlined
+                            : Icons.touch_app_outlined,
+                size: 22),
+            Text(card["name"] ?? state?["attributes"]?["friendly_name"] ?? "Button",
+                maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -137,6 +137,9 @@ mixin FLauncherGradients {
     ],
   );
 
+  static FLauncherGradient byUuid(String? uuid, {FLauncherGradient? orElse}) =>
+      all.firstWhere((g) => g.uuid == uuid, orElse: () => orElse ?? backglow);
+
   static List<FLauncherGradient> get all => [
         at4kDark,
         purpleGlow,

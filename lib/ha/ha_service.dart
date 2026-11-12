@@ -11,10 +11,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/io.dart';
 
-class HaService extends ChangeNotifier {
+class HaService extends ChangeNotifier with WidgetsBindingObserver {
   String? url;
   String? _token;
   String dashboard = "tv-launcher";
@@ -31,7 +32,19 @@ class HaService extends ChangeNotifier {
   int _backoffSeconds = 2;
 
   HaService() {
+    WidgetsBinding.instance.addObserver(this);
     _start();
+  }
+
+  // back on the home screen: refresh the dashboard (belt and braces next to lovelace_updated)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !configured) return;
+    if (connected) {
+      _loadDashboard().catchError((_) {});
+    } else {
+      _connect();
+    }
   }
 
   bool get configured => url != null;
@@ -178,8 +191,8 @@ class HaService extends ChangeNotifier {
       if (map["cards"] is List) {
         _collect(map["cards"], into);
         lastTile = null;
-      } else if (map["type"] == "button") {
-        if (lastTile != null) (lastTile["_options"] as List).add(map);
+      } else if (map["type"] == "button" && lastTile != null) {
+        (lastTile["_options"] as List).add(map);
       } else {
         if (map["type"] == "tile") {
           map["_options"] = <Map<String, dynamic>>[];
@@ -230,6 +243,7 @@ class HaService extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _retryTimer?.cancel();
     _channel?.sink.close();
     super.dispose();

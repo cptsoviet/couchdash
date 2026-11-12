@@ -21,6 +21,8 @@ import 'dart:ui';
 
 import 'package:flauncher/custom_traversal_policy.dart';
 import 'package:flauncher/database.dart';
+import 'package:flauncher/providers/settings_service.dart';
+import 'package:flauncher/ha/ha_service.dart';
 import 'package:flauncher/ha/ha_panel.dart';
 import 'package:flauncher/gradients.dart';
 import 'package:flauncher/providers/apps_service.dart';
@@ -38,9 +40,7 @@ class FLauncher extends StatelessWidget {
         policy: RowByRowTraversalPolicy(),
         child: Stack(
           children: [
-            Consumer<WallpaperService>(
-              builder: (_, wallpaper, __) => _wallpaper(context, wallpaper.wallpaperBytes, wallpaper.gradient),
-            ),
+            Builder(builder: _background),
             Scaffold(
               backgroundColor: Colors.transparent,
               appBar: _appBar(context),
@@ -128,6 +128,31 @@ class FLauncher extends StatelessWidget {
           ),
         ),
       );
+
+  // kronie-ha fork: normal wallpaper, or the mood wallpaper while its HA entity is "on"; crossfades between them
+  Widget _background(BuildContext context) {
+    final wallpaper = context.watch<WallpaperService>();
+    final settings = context.watch<SettingsService>();
+    final moodEntity = settings.moodEntity;
+    final moodState = context.select<HaService, String?>((ha) => moodEntity == null ? null : ha.states[moodEntity]?["state"]);
+    final Widget child;
+    if (moodState == "on") {
+      final mood = FLauncherGradients.byUuid(settings.moodGradientUuid);
+      child = KeyedSubtree(key: ValueKey("mood-${mood.uuid}"), child: mood.background());
+    } else {
+      final bytes = wallpaper.wallpaperBytes;
+      child = KeyedSubtree(
+        key: ValueKey(bytes != null ? "image-${identityHashCode(bytes)}" : "gradient-${wallpaper.gradient.uuid}"),
+        child: _wallpaper(context, bytes, wallpaper.gradient),
+      );
+    }
+    return AnimatedSwitcher(
+      duration: Duration(milliseconds: settings.moodFadeMs),
+      layoutBuilder: (current, previous) =>
+          Stack(fit: StackFit.expand, children: [...previous, if (current != null) current]),
+      child: child,
+    );
+  }
 
   Widget _wallpaper(BuildContext context, Uint8List? wallpaperImage, FLauncherGradient gradient) => wallpaperImage != null
       ? Image.memory(

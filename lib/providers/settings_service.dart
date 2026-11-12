@@ -23,6 +23,9 @@ const _use24HourTimeFormatKey = "use_24_hour_time_format";
 const _appHighlightAnimationEnabledKey = "app_highlight_animation_enabled";
 const _gradientUuidKey = "gradient_uuid";
 const _unsplashAuthorKey = "unsplash_author";
+const _moodEntityKey = "mood_entity";
+const _moodGradientUuidKey = "mood_gradient_uuid";
+const _moodFadeMsKey = "mood_fade_ms";
 
 class SettingsService extends ChangeNotifier {
   final SharedPreferences _sharedPreferences;
@@ -37,6 +40,28 @@ class SettingsService extends ChangeNotifier {
   bool get unsplashEnabled => false;
 
   String? get unsplashAuthor => _sharedPreferences.getString(_unsplashAuthorKey);
+
+  // kronie-ha fork: "mood wallpaper" - crossfade to a second background while an HA entity is on
+  String? get moodEntity => _sharedPreferences.getString(_moodEntityKey);
+
+  String? get moodGradientUuid => _sharedPreferences.getString(_moodGradientUuidKey);
+
+  int get moodFadeMs => _sharedPreferences.getInt(_moodFadeMsKey) ?? 2000;
+
+  Future<void> setMoodEntity(String? value) async {
+    value == null ? await _sharedPreferences.remove(_moodEntityKey) : await _sharedPreferences.setString(_moodEntityKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setMoodGradientUuid(String value) async {
+    await _sharedPreferences.setString(_moodGradientUuidKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setMoodFadeMs(int value) async {
+    await _sharedPreferences.setInt(_moodFadeMsKey, value);
+    notifyListeners();
+  }
 
   SettingsService(this._sharedPreferences);
 
