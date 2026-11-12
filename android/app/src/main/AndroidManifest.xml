@@ -61,8 +61,9 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
-                <!-- kronie-ha fork, test phase: no HOME/DEFAULT category, so installing this never
-                     displaces the user's current launcher. Re-add both when it becomes the home app. -->
+                <!-- kronie-ha fork: home app since 2026-11-12 (set as preferred home over adb; AT4K kept as fallback) -->
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
