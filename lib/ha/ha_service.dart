@@ -29,10 +29,15 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
   int _nextId = 1;
   final Map<int, Completer<dynamic>> _pending = {};
   Timer? _retryTimer;
+  Timer? _minuteTimer;
   int _backoffSeconds = 2;
 
   HaService() {
     WidgetsBinding.instance.addObserver(this);
+    // re-evaluate time-based card visibility every minute
+    _minuteTimer = Timer.periodic(Duration(minutes: 1), (_) {
+      if (cards.any((c) => c["visibility"] != null)) notifyListeners();
+    });
     _start();
   }
 
@@ -203,6 +208,48 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// HA card `visibility` conditions: time (after/before/weekdays, wraps midnight), state (state/state_not),
+  /// and/or. Other condition types (screen, user, numeric_state...) count as met.
+  bool isVisible(Map<String, dynamic> card) => _conditionsMet(card["visibility"]);
+
+  bool _conditionsMet(dynamic conditions) {
+    for (final c in (conditions as List?) ?? []) {
+      if (!_conditionMet(Map<String, dynamic>.from(c))) return false;
+    }
+    return true;
+  }
+
+  bool _conditionMet(Map<String, dynamic> c) {
+    switch (c["condition"]) {
+      case "and":
+        return _conditionsMet(c["conditions"]);
+      case "or":
+        return ((c["conditions"] as List?) ?? []).any((x) => _conditionMet(Map<String, dynamic>.from(x)));
+      case "time":
+        final now = DateTime.now();
+        const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+        final weekdays = c["weekdays"];
+        if (weekdays is List && !weekdays.contains(days[now.weekday - 1])) return false;
+        int? mins(dynamic t) {
+          final p = "${t ?? ""}".split(":");
+          if (p.length < 2) return null;
+          return int.parse(p[0]) * 60 + int.parse(p[1]);
+        }
+        final n = now.hour * 60 + now.minute;
+        final after = mins(c["after"]), before = mins(c["before"]);
+        if (after != null && before != null && after > before) return n >= after || n < before; // wraps midnight
+        return (after == null || n >= after) && (before == null || n < before);
+      case "state":
+        final s = states["${c["entity"]}"]?["state"];
+        bool matches(dynamic v) => v is List ? v.map((e) => "$e").contains(s) : "$v" == s;
+        if (c.containsKey("state") && !matches(c["state"])) return false;
+        if (c.containsKey("state_not") && matches(c["state_not"])) return false;
+        return true;
+      default:
+        return true;
+    }
+  }
+
   Future<void> callService(String domain, String service, {Map<String, dynamic>? data, dynamic target}) => _call({
         "type": "call_service",
         "domain": domain,
@@ -244,6 +291,7 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _minuteTimer?.cancel();
     _retryTimer?.cancel();
     _channel?.sink.close();
     super.dispose();

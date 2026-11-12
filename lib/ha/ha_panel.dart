@@ -25,6 +25,7 @@ class HaPanel extends StatelessWidget {
         final pills = <Map<String, dynamic>>[];
         final tiles = <Map<String, dynamic>>[];
         for (final card in ha.cards) {
+          if (!ha.isVisible(card)) continue; // HA card visibility (e.g. Goodnight only 8 PM-7 AM)
           switch (card["type"]) {
             case "glance":
               if (_isHeaderCard(card)) break; // "Outdoors"/"Indoors" glance cards feed the top bar instead
@@ -123,6 +124,8 @@ String formatState(Map<String, dynamic>? state) {
       final cur = a["current_temperature"], target = a["temperature"];
       if (cur != null && target != null) return "${_num(cur)}° → ${_num(target)}°";
       return _cap(s);
+    case "script":
+      return s == "on" ? "Running…" : "Ready";
     case "binary_sensor":
       const openish = {"door", "window", "opening", "garage_door"};
       if (openish.contains(a["device_class"])) return s == "on" ? "Open" : "Closed";
@@ -140,6 +143,30 @@ bool _isActive(Map<String, dynamic>? state) {
   return s == "on" || s == "open" || s == "unlocked" || s == "heat" || s == "cool" || s == "heat_cool";
 }
 
+// the HA card's icon when it is one of these common mdi names, else the domain icon
+const _mdi = <String, IconData>{
+  "mdi:weather-night": Icons.nightlight_round,
+  "mdi:sleep": Icons.bedtime_outlined,
+  "mdi:bed": Icons.bed_outlined,
+  "mdi:sofa": Icons.weekend_outlined,
+  "mdi:fan": Icons.air,
+  "mdi:air-conditioner": Icons.ac_unit,
+  "mdi:lightbulb": Icons.lightbulb_outline,
+  "mdi:lightbulb-group": Icons.lightbulb_outline,
+  "mdi:lightbulb-off": Icons.lightbulb_outline,
+  "mdi:lightbulb-group-off": Icons.power_settings_new,
+  "mdi:lock": Icons.lock_outline,
+  "mdi:door-closed-lock": Icons.lock_outline,
+  "mdi:television": Icons.tv,
+  "mdi:movie": Icons.movie_outlined,
+  "mdi:palette": Icons.palette_outlined,
+  "mdi:power": Icons.power_settings_new,
+  "mdi:home": Icons.home_outlined,
+};
+
+IconData _cardIcon(Map<String, dynamic> card, String entityId, Map<String, dynamic>? state) =>
+    _mdi["${card["icon"]}"] ?? _icon(entityId, state);
+
 IconData _icon(String entityId, Map<String, dynamic>? state) {
   final domain = entityId.split(".").first;
   switch (domain) {
@@ -155,6 +182,8 @@ IconData _icon(String entityId, Map<String, dynamic>? state) {
       return Icons.power_settings_new;
     case "camera":
       return Icons.videocam_outlined;
+    case "script":
+      return Icons.play_circle_outline;
     case "binary_sensor":
       return Icons.sensor_door_outlined;
     case "sensor":
@@ -363,7 +392,7 @@ class _HaTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(_icon(entityId, state), size: 22),
+            Icon(_cardIcon(card, entityId, state), size: 22),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(_name(card, state),
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.white70)),
