@@ -24,8 +24,19 @@ class FLauncherGradient {
   final String uuid;
   final String name;
   final Gradient gradient;
+  // kronie-ha fork: optional glows painted on top of the base gradient
+  final List<Gradient> layers;
 
-  FLauncherGradient(this.uuid, this.name, this.gradient);
+  FLauncherGradient(this.uuid, this.name, this.gradient, [this.layers = const []]);
+
+  Widget background({Key? key}) => Stack(
+        key: key,
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(decoration: BoxDecoration(gradient: gradient)),
+          for (final layer in layers) DecoratedBox(decoration: BoxDecoration(gradient: layer)),
+        ],
+      );
 }
 
 mixin FLauncherGradients {
@@ -91,8 +102,46 @@ mixin FLauncherGradients {
     ),
   );
 
+  // blue/purple glow from the 2026-11-11 HA launcher mockup
+  static final purpleGlow = FLauncherGradient(
+    "4f2c1d9e-6a0b-4c55-9d1e-kronie000002",
+    "Purple Glow",
+    LinearGradient(colors: [Color(0xFF0D1117), Color(0xFF0D1117)]),
+    [
+      RadialGradient(
+          center: Alignment(0.5, -0.7), radius: 1.1, colors: [Color(0xFF2C4A6E), Color(0x002C4A6E)]),
+      RadialGradient(
+          center: Alignment(-0.8, 0.8), radius: 0.9, colors: [Color(0xFF3B2A55), Color(0x003B2A55)]),
+    ],
+  );
+  // pure black: OLED pixels fully off
+  static final trueBlack = FLauncherGradient(
+    "4f2c1d9e-6a0b-4c55-9d1e-kronie000003",
+    "True Black (OLED)",
+    LinearGradient(colors: [Color(0xFF000000), Color(0xFF000000)]),
+  );
+  // matches the TV backlights (HA scene "Default Vibe": ~1600 K, rgb 255,115,0 at ~35%):
+  // warm glow bleeding in from the edges, dark centre for readability
+  static final backglow = FLauncherGradient(
+    "4f2c1d9e-6a0b-4c55-9d1e-kronie000004",
+    "Backglow",
+    LinearGradient(colors: [Color(0xFF0A0603), Color(0xFF000000)]),
+    [
+      // lights sit behind the TV's lower corners (user's photo 2026-11-11): strongest glow bottom left/right,
+      // fading up the sides; faint warm haze from the top like the lit wall above the TV
+      RadialGradient(
+          center: Alignment(-1.1, 0.85), radius: 1.05, colors: [Color(0x80FF7300), Color(0x26FF7300), Color(0x00FF7300)], stops: [0, 0.45, 1]),
+      RadialGradient(
+          center: Alignment(1.1, 0.85), radius: 1.05, colors: [Color(0x80FF7300), Color(0x26FF7300), Color(0x00FF7300)], stops: [0, 0.45, 1]),
+      RadialGradient(center: Alignment(0, -1.6), radius: 1.2, colors: [Color(0x26FF8A20), Color(0x00FF8A20)]),
+    ],
+  );
+
   static List<FLauncherGradient> get all => [
         at4kDark,
+        purpleGlow,
+        trueBlack,
+        backglow,
         greatWhale,
         viciousStance,
         teenNotebook,

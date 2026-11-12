@@ -58,7 +58,7 @@ class GradientPanelPage extends StatelessWidget {
                   child: InkWell(
                     autofocus: fLauncherGradient == FLauncherGradients.greatWhale,
                     onTap: () => context.read<WallpaperService>().setGradient(fLauncherGradient),
-                    child: Container(decoration: BoxDecoration(gradient: fLauncherGradient.gradient)),
+                    child: fLauncherGradient.background(),
                   ),
                 ),
               ),
