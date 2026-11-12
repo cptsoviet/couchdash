@@ -1,13 +1,15 @@
 /*
  * kronie-ha fork: the HA row above the apps. Renders the dashboard's cards:
  *   glance        -> read-only status pills
- *   tile          -> focusable tile; OK toggles only if the card sets tap_action: {action: toggle}
+ *   tile          -> focusable tile; OK = tap_action, OK held ~0.5 s = hold_action (HA semantics,
+ *                    default more-info = the launcher popup). Button cards stacked after a tile = popup options.
  *   picture-entity (camera) -> snapshot tile, refreshed every 10 s
  * Anything else is ignored, so the dashboard can also hold cards meant for other screens.
  */
 
 import 'dart:async';
 
+import 'package:flauncher/ha/ha_popup.dart';
 import 'package:flauncher/ha/ha_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -185,16 +187,53 @@ class _EntityPill extends StatelessWidget {
 class _TileFrame extends StatefulWidget {
   final Widget Function(bool focused) builder;
   final VoidCallback? onSelect;
+  final VoidCallback? onHold;
   final bool active;
 
-  _TileFrame({required this.builder, this.onSelect, this.active = false});
+  _TileFrame({required this.builder, this.onSelect, this.onHold, this.active = false});
 
   @override
   State<_TileFrame> createState() => _TileFrameState();
 }
 
 class _TileFrameState extends State<_TileFrame> {
+  static const _holdTime = Duration(milliseconds: 500);
   bool _focused = false;
+  bool _pressed = false;
+  Timer? _holdTimer;
+
+  bool _isSelectKey(KeyEvent e) =>
+      e.logicalKey == LogicalKeyboardKey.select ||
+      e.logicalKey == LogicalKeyboardKey.enter ||
+      e.logicalKey == LogicalKeyboardKey.gameButtonA;
+
+  // OK down starts a timer: released before 0.5 s = tap, still held = hold (fires once, release ignored)
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (!_isSelectKey(event)) return KeyEventResult.ignored;
+    if (event is KeyDownEvent) {
+      setState(() => _pressed = true);
+      _holdTimer?.cancel();
+      _holdTimer = Timer(_holdTime, () {
+        _holdTimer = null;
+        setState(() => _pressed = false);
+        widget.onHold?.call();
+      });
+    } else if (event is KeyUpEvent) {
+      if (_holdTimer != null) {
+        _holdTimer!.cancel();
+        _holdTimer = null;
+        widget.onSelect?.call();
+      }
+      setState(() => _pressed = false);
+    }
+    return KeyEventResult.handled;
+  }
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Focus(
@@ -202,19 +241,11 @@ class _TileFrameState extends State<_TileFrame> {
           setState(() => _focused = f);
           if (f) Scrollable.ensureVisible(context, alignment: 0.5, duration: Duration(milliseconds: 150));
         },
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.select ||
-                  event.logicalKey == LogicalKeyboardKey.enter ||
-                  event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
-            widget.onSelect?.call();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
+        onKeyEvent: _onKey,
         child: AnimatedScale(
-          scale: _focused ? 1.08 : 1.0,
-          duration: Duration(milliseconds: 150),
+          // shrinks while OK is held, so you can feel the long press register
+          scale: _pressed ? 0.96 : (_focused ? 1.08 : 1.0),
+          duration: _pressed ? _holdTime : Duration(milliseconds: 150),
           child: AnimatedContainer(
             duration: Duration(milliseconds: 150),
             width: _tileWidth,
@@ -245,10 +276,16 @@ class _HaTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final entityId = card["entity"] as String;
     final state = context.select<HaService, Map<String, dynamic>?>((ha) => ha.states[entityId]);
-    final toggles = card["tap_action"]?["action"] == "toggle";
+    void run(String key) {
+      final ha = context.read<HaService>();
+      final action = card[key] == null ? null : Map<String, dynamic>.from(card[key]);
+      if (ha.runAction(action, entityId, fallback: "more-info")) showHaPopup(context, card);
+    }
+
     return _TileFrame(
       active: _isActive(state),
-      onSelect: toggles ? () => context.read<HaService>().toggle(entityId) : null,
+      onSelect: () => run("tap_action"),
+      onHold: () => run("hold_action"),
       builder: (_) => Padding(
         padding: EdgeInsets.all(12),
         child: Column(

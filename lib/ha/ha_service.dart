@@ -169,15 +169,55 @@ class HaService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // flattens stacks/grids so any HA layout works; only the leaf cards matter here
+  // Flattens stacks/grids so any HA layout works. Button cards that follow a tile inside the same
+  // stack become that tile's popup options (stored under "_options"); loose button cards are ignored.
   void _collect(dynamic list, List<Map<String, dynamic>> into) {
+    Map<String, dynamic>? lastTile;
     for (final card in (list as List?) ?? []) {
       final map = Map<String, dynamic>.from(card);
       if (map["cards"] is List) {
         _collect(map["cards"], into);
+        lastTile = null;
+      } else if (map["type"] == "button") {
+        if (lastTile != null) (lastTile["_options"] as List).add(map);
       } else {
+        if (map["type"] == "tile") {
+          map["_options"] = <Map<String, dynamic>>[];
+          lastTile = map;
+        }
         into.add(map);
       }
+    }
+  }
+
+  Future<void> callService(String domain, String service, {Map<String, dynamic>? data, dynamic target}) => _call({
+        "type": "call_service",
+        "domain": domain,
+        "service": service,
+        if (data != null && data.isNotEmpty) "service_data": data,
+        if (target != null) "target": target,
+      }).catchError((_) {});
+
+  /// Runs an HA card action (tap_action / hold_action). Returns true if it was "more-info",
+  /// which the caller shows as the launcher's own popup.
+  bool runAction(Map<String, dynamic>? action, String? entityId, {required String fallback}) {
+    final kind = action?["action"] ?? fallback;
+    switch (kind) {
+      case "toggle":
+        if (entityId != null) toggle(entityId);
+        return false;
+      case "perform-action":
+      case "call-service":
+        final svc = (action?["perform_action"] ?? action?["service"]) as String?;
+        if (svc == null || !svc.contains(".")) return false;
+        final parts = svc.split(".");
+        callService(parts[0], parts[1],
+            data: Map<String, dynamic>.from(action?["data"] ?? action?["service_data"] ?? {}), target: action?["target"]);
+        return false;
+      case "more-info":
+        return true;
+      default:
+        return false;
     }
   }
 
