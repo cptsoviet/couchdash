@@ -566,6 +566,8 @@ class HaHeader extends StatelessWidget {
         id.contains("aqi") ||
         id.contains("air_quality") ||
         "${a["friendly_name"] ?? ""}".toLowerCase().contains("air quality");
+    // Winix purifiers report air quality as a level 1/2/3 = good/fair/poor, not an EPA number
+    if (isAqi && id.contains("winix")) return _AqiBadge(const {"1": "good", "2": "fair", "3": "poor"}[s] ?? s);
     if (isAqi) return _AqiBadge(s);
     return Text(formatState(state), style: style);
   }
