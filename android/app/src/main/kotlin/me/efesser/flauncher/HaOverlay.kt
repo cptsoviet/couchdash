@@ -1,6 +1,6 @@
 /*
- * FLauncher HA: the overlay windows for HA notifications (drawn over any app; needs "display over other apps",
- * granted once with: adb shell appops set net.kronie.flauncher_ha SYSTEM_ALERT_WINDOW allow).
+ * CouchDash: the overlay windows for HA notifications (drawn over any app; needs "display over other apps",
+ * granted once with: adb shell appops set app.couchdash.launcher SYSTEM_ALERT_WINDOW allow).
  *   corner card  - top right; image/camera, title, message, action buttons, auto-dismiss
  *   critical     - centred, screen dimmed, red border; stays until a button or Back
  *   chip         - small persistent pill top left (data.chip: true), optional live countdown (data.countdown_until)

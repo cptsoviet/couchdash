@@ -1,7 +1,7 @@
 /*
  * kronie-ha fork: Home Assistant connection for the launcher's tile row.
  * Config is a JSON file pushed over adb to the app's external files dir:
- *   /sdcard/Android/data/net.kronie.flauncher_ha/files/ha.json
+ *   /sdcard/Android/data/app.couchdash.launcher/files/ha.json
  *   {"url": "http://<ha>:8123", "token": "<long-lived token>", "dashboard": "tv-launcher"}
  * The layout comes from that HA dashboard's first view, so tiles are changed in HA, not here.
  */

@@ -82,7 +82,7 @@ class FLauncherApp extends StatelessWidget {
             ...WidgetsApp.defaultActions,
             DirectionalFocusIntent: SoundFeedbackDirectionalFocusAction(context),
           },
-          title: 'FLauncher',
+          title: 'CouchDash',
           theme: ThemeData(
             brightness: Brightness.dark,
             useMaterial3: false, // keep upstream's Material 2 look on current Flutter

@@ -1,6 +1,6 @@
-# FLauncher HA
+# CouchDash
 
-An Android TV launcher with a live **Home Assistant** panel above the app list. It is a fork of
+**CouchDash** (couchdash.app) is an Android TV launcher with a live **Home Assistant** panel above the app list. It is a fork of
 [FLauncher](https://gitlab.com/flauncher/flauncher) (GPL-3.0, © Étienne Fesser), restyled after AT4K: dark
 backgrounds, a clock pill top-right, and the first app row in a rounded dock.
 
@@ -67,7 +67,7 @@ Hardware: about 6 GB of disk for the SDKs and Gradle caches. Builds need about 2
 ## 2. Build the APK
 
 ```sh
-git clone <this repo> flauncher-ha && cd flauncher-ha
+git clone <this repo> couchdash && cd couchdash
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs   # only after changing database.dart (drift); generated code is committed
 flutter build apk --release --target-platform android-arm64     # most TV boxes; use android-arm for 32-bit devices
@@ -91,7 +91,7 @@ a bigger machine for faster builds.
    adb connect <tv-ip>:5555        # accept the "Allow debugging?" prompt on the TV (tick "always allow")
    adb install -r build/app/outputs/flutter-apk/app-release.apk
    ```
-3. The app appears as **FLauncher HA** in the TV's app list. Open it once.
+3. The app appears as **CouchDash** in the TV's app list. Open it once.
 
 ## 4. Link it to Home Assistant
 
@@ -107,9 +107,9 @@ Create `ha.json`:
 ```
 Push it into the app's own storage. No storage permission is needed for this path:
 ```sh
-adb shell mkdir -p /sdcard/Android/data/net.kronie.flauncher_ha/files
-adb push ha.json /sdcard/Android/data/net.kronie.flauncher_ha/files/ha.json
-adb shell am force-stop net.kronie.flauncher_ha     # re-reads the file on next start
+adb shell mkdir -p /sdcard/Android/data/app.couchdash.launcher/files
+adb push ha.json /sdcard/Android/data/app.couchdash.launcher/files/ha.json
+adb shell am force-stop app.couchdash.launcher     # re-reads the file on next start
 ```
 Without the file there is simply no HA panel. Check that the TV can reach HA, including firewalls between VLANs:
 `adb shell 'printf "GET /api/ HTTP/1.0\r\n\r\n" | toybox nc <ha-host> 8123 | head -1'` should print `HTTP/1.0 401`.
@@ -172,7 +172,7 @@ to the wallpaper picked on the TV.
 
 The launcher can register as an HA **mobile_app device** (the same API the Companion app uses). HA then gets `notify.mobile_app_<device_name>`, and its messages are drawn on top of whatever is playing.
 1. Allow drawing over other apps (Android TV has no settings screen for it):
-   `adb shell appops set net.kronie.flauncher_ha SYSTEM_ALERT_WINDOW allow`
+   `adb shell appops set app.couchdash.launcher SYSTEM_ALERT_WINDOW allow`
 2. In `ha.json` add `"notifications": true` (optional: `"device_name": "Living Room TV"`, `"offline_max_age_minutes": 10`). Push it again, then restart the app (`am force-stop`, open it). On first start it registers; the device appears in HA under Mobile App.
 3. Send from HA:
 ```yaml
@@ -195,20 +195,20 @@ Local test without HA: `tools/notify-test.sh <tv-ip:5555> grant|card|actions|cri
 
 ## 5. Make it the home screen
 
-The test builds can be opened from any launcher. To make FLauncher HA the home app:
+The test builds can be opened from any launcher. To make CouchDash the home app:
 ```sh
-adb shell cmd package set-home-activity net.kronie.flauncher_ha/me.efesser.flauncher.MainActivity
+adb shell cmd package set-home-activity app.couchdash.launcher/me.efesser.flauncher.MainActivity
 ```
 On Google TV / Android TV with the stock launcher you may also need to disable it:
 `adb shell pm disable-user --user 0 com.google.android.tvlauncher`. That is reversible with `pm enable`.
-If a button-remapping app such as "Home Button" or "Button Mapper" owns the Home key, set its Home action to FLauncher HA.
+If a button-remapping app such as "Home Button" or "Button Mapper" owns the Home key, set its Home action to CouchDash.
 
 To go back: `cmd package set-home-activity <other.launcher/.Activity>` (and re-enable the stock launcher).
 
 ## Development notes
 - **HA code:** `lib/ha/`, with `ha_service.dart` (WebSocket client, config, actions, visibility), `ha_panel.dart` (top bar, pills, tiles) and `ha_popup.dart` (popup).
 - **Changes vs upstream:** see `git log`. Firebase/Unsplash were removed, the theme was ported to current Flutter (Material 2 look kept), and the layered gradients are in `gradients.dart`.
-- **Application id:** `net.kronie.flauncher_ha` (label "FLauncher HA"), so it can sit next to upstream FLauncher. The Kotlin/Dart package names stay `me.efesser.flauncher` / `flauncher`, so the activity is `net.kronie.flauncher_ha/me.efesser.flauncher.MainActivity`.
+- **Application id:** `app.couchdash.launcher` (label "CouchDash"), so it can sit next to upstream FLauncher. The Kotlin/Dart package names stay `me.efesser.flauncher` / `flauncher`, so the activity is `app.couchdash.launcher/me.efesser.flauncher.MainActivity`.
 - **Iterating:** edit, then `flutter build apk --release --target-platform android-arm64`, then `adb install -r …`. Settings and the HA config survive updates as long as the signing key stays the same.
 
 License: GPL-3.0, same as upstream.

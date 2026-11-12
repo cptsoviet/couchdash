@@ -1,5 +1,5 @@
 /*
- * FLauncher HA: notifications from Home Assistant, drawn over any app.
+ * CouchDash: notifications from Home Assistant, drawn over any app.
  *
  * Registers once as an HA mobile_app device (same API as the Companion app) -> HA gets notify.mobile_app_<name>.
  * Keeps its own WebSocket and subscribes to mobile_app/push_notification_channel, so delivery works while
@@ -50,7 +50,7 @@ private const val CHANNEL_ID = "ha_notify_service"
 
 class HaNotifyService : Service() {
     companion object {
-        const val ACTION_TEST = "net.kronie.flauncher_ha.TEST_NOTIFY"
+        const val ACTION_TEST = "app.couchdash.launcher.TEST_NOTIFY"
 
         fun start(context: Context) {
             val intent = Intent(context, HaNotifyService::class.java)
@@ -156,9 +156,9 @@ class HaNotifyService : Service() {
     private fun register(deviceName: String): String? {
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()
         val body = JSONObject()
-            .put("device_id", "flauncher-ha-$deviceId")
-            .put("app_id", "net.kronie.flauncher_ha")
-            .put("app_name", "FLauncher HA")
+            .put("device_id", "couchdash-$deviceId")
+            .put("app_id", "app.couchdash.launcher")
+            .put("app_name", "CouchDash")
             .put("app_version", packageManager.getPackageInfo(packageName, 0).versionName ?: "1")
             .put("device_name", deviceName)
             .put("manufacturer", Build.MANUFACTURER)
@@ -297,7 +297,7 @@ class HaBootReceiver : BroadcastReceiver() {
 
 /**
  * Local test hook, protected by android.permission.DUMP so only adb shell/system can use it:
- * adb shell am broadcast -a net.kronie.flauncher_ha.TEST_NOTIFY -n net.kronie.flauncher_ha/me.efesser.flauncher.HaTestReceiver --es json '{"title":"Hi","message":"Test"}'
+ * adb shell am broadcast -a app.couchdash.launcher.TEST_NOTIFY -n app.couchdash.launcher/me.efesser.flauncher.HaTestReceiver --es json '{"title":"Hi","message":"Test"}'
  */
 class HaTestReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
