@@ -107,7 +107,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
             transformAlignment: Alignment.center,
             transform: _scaleTransform(context),
             child: Material(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
               elevation: Focus.of(context).hasFocus ? 16 : 0,
               shadowColor: Colors.black,
@@ -175,7 +175,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                                             computeBorderColor(_animation.value, _lastBorderColor),
                                         width: 3)
                                     : null,
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(14),
                               ),
                             ),
                           ),

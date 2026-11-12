@@ -29,6 +29,13 @@ class FLauncherGradient {
 }
 
 mixin FLauncherGradients {
+  // kronie-ha fork: AT4K-style dark background, the default
+  static final at4kDark = FLauncherGradient(
+    "4f2c1d9e-6a0b-4c55-9d1e-at4k00000001",
+    "AT4K Dark",
+    LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF0E0F12), Color(0xFF2B2D3A)]),
+  );
   static final greatWhale = FLauncherGradient(
     "8bbdc190-ff6c-496e-8033-3c217e78da36",
     "Great Whale",
@@ -85,6 +92,7 @@ mixin FLauncherGradients {
   );
 
   static List<FLauncherGradient> get all => [
+        at4kDark,
         greatWhale,
         viciousStance,
         teenNotebook,

@@ -28,17 +28,20 @@ import 'package:provider/provider.dart';
 class CategoryRow extends StatelessWidget {
   final Category category;
   final List<App> applications;
+  final bool showTitle;
 
   CategoryRow({
     Key? key,
     required this.category,
     required this.applications,
+    this.showTitle = true,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (showTitle)
           Padding(
             padding: EdgeInsets.only(left: 16, bottom: 8),
             child: Text(category.name,

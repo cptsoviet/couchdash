@@ -43,7 +43,7 @@ class FLauncher extends StatelessWidget {
               backgroundColor: Colors.transparent,
               appBar: _appBar(context),
               body: Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: EdgeInsets.fromLTRB(40, 8, 40, 0),
                 child: Consumer<AppsService>(
                   builder: (context, appsService, _) => appsService.initialized
                       ? SingleChildScrollView(child: _categories(appsService.categoriesWithApps))
@@ -55,59 +55,75 @@ class FLauncher extends StatelessWidget {
         ),
       );
 
+  // kronie-ha fork: AT4K-style layout - no category titles, first category sits in a rounded "dock"
   Widget _categories(List<CategoryWithApps> categoriesWithApps) => Column(
-        children: categoriesWithApps.map((categoryWithApps) {
-          switch (categoryWithApps.category.type) {
-            case CategoryType.row:
-              return Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: CategoryRow(
-                    key: Key(categoryWithApps.category.id.toString()),
-                    category: categoryWithApps.category,
-                    applications: categoryWithApps.applications),
-              );
-            case CategoryType.grid:
-              return Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: AppsGrid(
-                    key: Key(categoryWithApps.category.id.toString()),
-                    category: categoryWithApps.category,
-                    applications: categoryWithApps.applications),
-              );
-          }
-        }).toList(),
+        children: [
+          for (var i = 0; i < categoriesWithApps.length; i++)
+            i == 0 ? _dock(_category(categoriesWithApps[i])) : _category(categoriesWithApps[i]),
+        ],
       );
 
-  AppBar _appBar(BuildContext context) => AppBar(
-        actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned(
-                left: 2.0,
-                top: 18.0,
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2, tileMode: TileMode.decal),
-                  child: Icon(Icons.settings_outlined, color: Colors.black54),
-                ),
+  Widget _dock(Widget child) => Container(
+        margin: EdgeInsets.symmetric(vertical: 8),
+        padding: EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: Color(0x14FFFFFF),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Color(0x14FFFFFF)),
+        ),
+        child: child,
+      );
+
+  Widget _category(CategoryWithApps categoryWithApps) {
+    switch (categoryWithApps.category.type) {
+      case CategoryType.row:
+        return Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: CategoryRow(
+              key: Key(categoryWithApps.category.id.toString()),
+              category: categoryWithApps.category,
+              applications: categoryWithApps.applications,
+              showTitle: false),
+        );
+      case CategoryType.grid:
+        return Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: AppsGrid(
+              key: Key(categoryWithApps.category.id.toString()),
+              category: categoryWithApps.category,
+              applications: categoryWithApps.applications,
+              showTitle: false),
+        );
+    }
+  }
+
+  // AT4K-style status pill, top right: clock + settings
+  PreferredSizeWidget _appBar(BuildContext context) => PreferredSize(
+        preferredSize: Size.fromHeight(80),
+        child: SafeArea(
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Container(
+              margin: EdgeInsets.only(top: 20, right: 40),
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+              decoration: BoxDecoration(color: Color(0x66000000), borderRadius: BorderRadius.circular(28)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TimeWidget(),
+                  SizedBox(width: 20),
+                  IconButton(
+                    padding: EdgeInsets.all(4),
+                    constraints: BoxConstraints(),
+                    splashRadius: 20,
+                    icon: Icon(Icons.settings),
+                    onPressed: () => showDialog(context: context, builder: (_) => SettingsPanel()),
+                  ),
+                ],
               ),
-              IconButton(
-                padding: EdgeInsets.all(2),
-                constraints: BoxConstraints(),
-                splashRadius: 20,
-                icon: Icon(Icons.settings_outlined),
-                onPressed: () => showDialog(context: context, builder: (_) => SettingsPanel()),
-              ),
-            ],
-          ),
-          Padding(
-            padding: EdgeInsets.only(left: 16, right: 32),
-            child: Align(
-              alignment: Alignment.center,
-              child: TimeWidget(),
             ),
           ),
-        ],
+        ),
       );
 
   Widget _wallpaper(BuildContext context, Uint8List? wallpaperImage, Gradient gradient) => wallpaperImage != null
