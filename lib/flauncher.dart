@@ -113,6 +113,7 @@ class FLauncher extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  HaWeatherInline(),
                   TimeWidget(),
                   SizedBox(width: 20),
                   IconButton(

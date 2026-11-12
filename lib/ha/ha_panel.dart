@@ -28,7 +28,9 @@ class HaPanel extends StatelessWidget {
           switch (card["type"]) {
             case "glance":
               for (final e in (card["entities"] as List?) ?? []) {
-                pills.add(e is String ? {"entity": e} : Map<String, dynamic>.from(e));
+                final entry = e is String ? {"entity": e} : Map<String, dynamic>.from(e);
+                // weather goes next to the clock (HaWeatherInline), not into the pill row
+                if (!"${entry["entity"]}".startsWith("weather.")) pills.add(entry);
               }
               break;
             case "tile":
@@ -431,5 +433,39 @@ class _ButtonTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Weather shown left of the clock in the top-right pill: "Clear ☾ 81°F".
+/// Uses the first weather.* entity in the dashboard's glance cards, so it is chosen in HA.
+class HaWeatherInline extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final ha = context.watch<HaService>();
+    String? entityId;
+    for (final card in ha.cards.where((c) => c["type"] == "glance")) {
+      for (final e in (card["entities"] as List?) ?? []) {
+        final id = "${e is String ? e : e["entity"]}";
+        if (id.startsWith("weather.")) {
+          entityId ??= id;
+        }
+      }
+    }
+    final state = entityId == null ? null : ha.states[entityId];
+    if (state == null) return SizedBox();
+    final s = "${state["state"]}";
+    final w = _weather[s] ?? (_cap(s), Icons.cloud_outlined);
+    final a = state["attributes"] ?? {};
+    final t = a["temperature"];
+    final style = Theme.of(context).textTheme.titleLarge!.copyWith(fontWeight: FontWeight.w400);
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Text(w.$1, style: style.copyWith(color: Colors.white70)),
+      SizedBox(width: 8),
+      Icon(w.$2, size: 22),
+      if (t != null) ...[SizedBox(width: 8), Text("${(t as num).round()}${a["temperature_unit"] ?? "°F"}", style: style)],
+      SizedBox(width: 16),
+      Container(width: 1, height: 22, color: Colors.white24),
+      SizedBox(width: 16),
+    ]);
   }
 }
