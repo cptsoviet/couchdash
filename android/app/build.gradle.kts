@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         // kronie-ha fork: own application ID so it never collides with upstream FLauncher
-        applicationId = "net.kronie.flauncher"
+        applicationId = "net.kronie.flauncher_ha"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

@@ -28,13 +28,48 @@ the TV over HTTP(S).
 
 ---
 
-## 1. Build the APK
+## 1. Set up the build environment (Linux, one time)
 
-Prerequisites: Flutter (stable, Dart 3), Android SDK (platform-tools, a current build-tools/platform), JDK 17.
+No Android Studio or emulator needed. Example layout under `/opt/android-dev`; any location works.
+
+1. **Base packages and JDK 17** (the Android Gradle plugin needs 17+; 21 also works if your AGP supports it):
+   ```sh
+   sudo apt install -y git curl unzip xz-utils zip openjdk-17-jdk-headless
+   ```
+2. **Flutter SDK** (stable channel, includes Dart):
+   ```sh
+   git clone -b stable --depth 1 https://github.com/flutter/flutter.git /opt/android-dev/flutter
+   export PATH=/opt/android-dev/flutter/bin:$PATH
+   flutter --version            # first run downloads the Dart SDK and engine
+   ```
+3. **Android SDK command-line tools** (from developer.android.com/studio#command-line-tools-only):
+   ```sh
+   mkdir -p /opt/android-dev/android-sdk/cmdline-tools
+   cd /tmp && curl -LO https://dl.google.com/android/repository/commandlinetools-linux-<version>_latest.zip
+   unzip commandlinetools-linux-*_latest.zip -d /opt/android-dev/android-sdk/cmdline-tools
+   mv /opt/android-dev/android-sdk/cmdline-tools/cmdline-tools /opt/android-dev/android-sdk/cmdline-tools/latest
+   export ANDROID_HOME=/opt/android-dev/android-sdk ANDROID_SDK_ROOT=/opt/android-dev/android-sdk
+   export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+   sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+   sdkmanager --licenses        # accept all
+   ```
+   The first Gradle build downloads whatever else it needs (other build-tools, NDK, CMake) by itself.
+4. **Point Flutter at the SDK and JDK, then check:**
+   ```sh
+   flutter config --android-sdk $ANDROID_HOME
+   flutter config --jdk-dir /usr/lib/jvm/java-17-openjdk-amd64
+   flutter doctor               # "Android toolchain" must be ✓; Chrome / Linux desktop / Android Studio warnings are irrelevant
+   ```
+5. Put the `export` lines in `~/.profile` (or `/etc/profile.d/android-dev.sh`) so new shells have them.
+
+Hardware: about 6 GB of disk for the SDKs and Gradle caches. Builds need about 2 GB of free RAM (see the memory note below).
+
+## 2. Build the APK
 
 ```sh
 git clone <this repo> flauncher-ha && cd flauncher-ha
 flutter pub get
+dart run build_runner build --delete-conflicting-outputs   # only after changing database.dart (drift); generated code is committed
 flutter build apk --release --target-platform android-arm64     # most TV boxes; use android-arm for 32-bit devices
 # -> build/app/outputs/flutter-apk/app-release.apk
 ```
@@ -47,7 +82,7 @@ would have to uninstall (and lose its settings) first.
 **Low-memory build hosts:** `android/gradle.properties` caps Gradle at 1.5 GB heap, with the daemon off. Raise it on
 a bigger machine for faster builds.
 
-## 2. Install on the TV
+## 3. Install on the TV
 
 1. On the TV, enable **Developer options** (Settings → Device Preferences → About → click *Build* 7 times), then
    turn on **Network debugging** / **USB debugging**.
@@ -58,28 +93,28 @@ a bigger machine for faster builds.
    ```
 3. The app appears as **FLauncher HA** in the TV's app list. Open it once.
 
-## 3. Link it to Home Assistant
+## 4. Link it to Home Assistant
 
-### 3a. HA user and token
+### 4a. HA user and token
 1. In HA, create a **non-admin** user for the TV (Settings → People → Users → Add user), e.g. "TV Launcher".
    Allowing local login only is fine.
 2. Log in as that user (or ask an admin), go to Profile → Security → **Long-lived access tokens**, and create a token.
 
-### 3b. Config file on the TV
+### 4b. Config file on the TV
 Create `ha.json`:
 ```json
 { "url": "http://<ha-host>:8123", "token": "<long-lived token>", "dashboard": "tv-launcher" }
 ```
 Push it into the app's own storage. No storage permission is needed for this path:
 ```sh
-adb shell mkdir -p /sdcard/Android/data/net.kronie.flauncher/files
-adb push ha.json /sdcard/Android/data/net.kronie.flauncher/files/ha.json
-adb shell am force-stop net.kronie.flauncher     # re-reads the file on next start
+adb shell mkdir -p /sdcard/Android/data/net.kronie.flauncher_ha/files
+adb push ha.json /sdcard/Android/data/net.kronie.flauncher_ha/files/ha.json
+adb shell am force-stop net.kronie.flauncher_ha     # re-reads the file on next start
 ```
 Without the file there is simply no HA panel. Check that the TV can reach HA, including firewalls between VLANs:
 `adb shell 'printf "GET /api/ HTTP/1.0\r\n\r\n" | toybox nc <ha-host> 8123 | head -1'` should print `HTTP/1.0 401`.
 
-### 3c. The dashboard
+### 4c. The dashboard
 Create a dashboard in HA (Settings → Dashboards → Add, e.g. "TV Launcher" with URL `tv-launcher`, hidden from the
 sidebar, **not** admin-only). The launcher reads the **first view**: its `cards`, and/or all `sections` of a
 sections view. Stacks and grids are flattened.
@@ -127,17 +162,17 @@ views:
         entity: climate.living_room        # OK opens temperature controls
 ```
 
-### 3d. Optional: wallpaper chosen by HA
+### 4d. Optional: wallpaper chosen by HA
 Create `input_select.tv_launcher_wallpaper`. Its options must be launcher wallpaper names: *True Black (OLED), Backglow,
 Purple Glow, AT4K Dark, Great Whale, …* (see `lib/gradients.dart`). Set it from automations. On the TV, Settings → Wallpaper
 → **Wallpaper from Home Assistant** lets HA choose (on by default) and sets the fade time. An unknown value falls back
 to the wallpaper picked on the TV.
 
-## 4. Make it the home screen
+## 5. Make it the home screen
 
 The test builds can be opened from any launcher. To make FLauncher HA the home app:
 ```sh
-adb shell cmd package set-home-activity net.kronie.flauncher/me.efesser.flauncher.MainActivity
+adb shell cmd package set-home-activity net.kronie.flauncher_ha/me.efesser.flauncher.MainActivity
 ```
 On Google TV / Android TV with the stock launcher you may also need to disable it:
 `adb shell pm disable-user --user 0 com.google.android.tvlauncher`. That is reversible with `pm enable`.
@@ -148,6 +183,7 @@ To go back: `cmd package set-home-activity <other.launcher/.Activity>` (and re-e
 ## Development notes
 - **HA code:** `lib/ha/`, with `ha_service.dart` (WebSocket client, config, actions, visibility), `ha_panel.dart` (top bar, pills, tiles) and `ha_popup.dart` (popup).
 - **Changes vs upstream:** see `git log`. Firebase/Unsplash were removed, the theme was ported to current Flutter (Material 2 look kept), and the layered gradients are in `gradients.dart`.
-- **Package id:** `net.kronie.flauncher` (label "FLauncher HA"), so it can sit next to upstream FLauncher.
+- **Application id:** `net.kronie.flauncher_ha` (label "FLauncher HA"), so it can sit next to upstream FLauncher. The Kotlin/Dart package names stay `me.efesser.flauncher` / `flauncher`, so the activity is `net.kronie.flauncher_ha/me.efesser.flauncher.MainActivity`.
+- **Iterating:** edit, then `flutter build apk --release --target-platform android-arm64`, then `adb install -r …`. Settings and the HA config survive updates as long as the signing key stays the same.
 
 License: GPL-3.0, same as upstream.
