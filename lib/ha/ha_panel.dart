@@ -149,11 +149,32 @@ IconData _icon(String entityId, Map<String, dynamic>? state) {
   }
 }
 
+// HA weather conditions -> label + icon (pill shows e.g. "Clear ☾ 81°F")
+const _weather = <String, (String, IconData)>{
+  "clear-night": ("Clear", Icons.nightlight_round),
+  "sunny": ("Clear", Icons.wb_sunny_outlined),
+  "partlycloudy": ("Partly cloudy", Icons.wb_cloudy_outlined),
+  "cloudy": ("Cloudy", Icons.cloud),
+  "fog": ("Fog", Icons.blur_on),
+  "rainy": ("Rain", Icons.water_drop_outlined),
+  "pouring": ("Heavy rain", Icons.water_drop),
+  "lightning": ("Thunder", Icons.flash_on),
+  "lightning-rainy": ("Storms", Icons.thunderstorm_outlined),
+  "snowy": ("Snow", Icons.ac_unit),
+  "snowy-rainy": ("Sleet", Icons.ac_unit),
+  "hail": ("Hail", Icons.grain),
+  "windy": ("Windy", Icons.air),
+  "windy-variant": ("Windy", Icons.air),
+  "exceptional": ("Weather alert", Icons.warning_amber),
+};
+
 class _Pill extends StatelessWidget {
   final String text;
   final Color? dot;
+  final IconData? icon;
+  final String? trailing;
 
-  _Pill({required this.text, this.dot});
+  _Pill({required this.text, this.dot, this.icon, this.trailing});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -166,6 +187,11 @@ class _Pill extends StatelessWidget {
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (dot != null) ...[Icon(Icons.circle, size: 8, color: dot), SizedBox(width: 6)],
           Text(text, style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.9))),
+          if (icon != null) ...[SizedBox(width: 6), Icon(icon, size: 15, color: Colors.white)],
+          if (trailing != null) ...[
+            SizedBox(width: 6),
+            Text(trailing!, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          ],
         ]),
       );
 }
@@ -179,6 +205,13 @@ class _EntityPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.select<HaService, Map<String, dynamic>?>((ha) => ha.states[entry["entity"]]);
     final s = state?["state"];
+    if ("${entry["entity"]}".startsWith("weather.") && state != null) {
+      final w = _weather[s] ?? (_cap("$s"), Icons.cloud_outlined);
+      final a = state["attributes"] ?? {};
+      final t = a["temperature"];
+      final unit = "${a["temperature_unit"] ?? "°F"}";
+      return _Pill(text: w.$1, icon: w.$2, trailing: t == null ? null : "${(t as num).round()}$unit");
+    }
     final Color? dot = s == "locked" || s == "off" && "${entry["entity"]}".startsWith("binary_sensor.")
         ? Colors.greenAccent
         : s == "unlocked" || s == "on" && "${entry["entity"]}".startsWith("binary_sensor.")
