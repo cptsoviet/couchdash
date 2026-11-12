@@ -26,6 +26,8 @@
         android:required="true" />
 
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- kronie-ha fork: Home Assistant over the LAN (plain http to HA) -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
         <intent>
@@ -41,7 +43,8 @@
         android:banner="@drawable/banner"
         android:fullBackupContent="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="FLauncher HA">
+        android:label="FLauncher HA"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"

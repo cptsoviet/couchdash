@@ -29,11 +29,21 @@ android {
         versionName = flutter.versionName
     }
 
+    // kronie-ha fork: release key kept outside the repo (it is the original build key, preserved so
+    // updates install over the existing app). Missing key -> falls back to the debug key.
+    val releaseKeystore = file(System.getProperty("user.home") + "/.claude/keys/tv-launcher/signing.keystore")
+    signingConfigs {
+        create("release") {
+            storeFile = releaseKeystore
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystore.exists()) "release" else "debug")
         }
     }
 }

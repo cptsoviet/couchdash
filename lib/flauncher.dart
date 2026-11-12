@@ -21,6 +21,7 @@ import 'dart:ui';
 
 import 'package:flauncher/custom_traversal_policy.dart';
 import 'package:flauncher/database.dart';
+import 'package:flauncher/ha/ha_panel.dart';
 import 'package:flauncher/gradients.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/wallpaper_service.dart';
@@ -47,7 +48,8 @@ class FLauncher extends StatelessWidget {
                 padding: EdgeInsets.fromLTRB(40, 8, 40, 0),
                 child: Consumer<AppsService>(
                   builder: (context, appsService, _) => appsService.initialized
-                      ? SingleChildScrollView(child: _categories(appsService.categoriesWithApps))
+                      ? SingleChildScrollView(
+                          child: Column(children: [HaPanel(), _categories(appsService.categoriesWithApps)]))
                       : _emptyState(context),
                 ),
               ),

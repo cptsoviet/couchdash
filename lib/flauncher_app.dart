@@ -28,6 +28,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'database.dart';
+import 'ha/ha_service.dart';
 import 'flauncher.dart';
 import 'flauncher_channel.dart';
 
@@ -61,6 +62,7 @@ class FLauncherApp extends StatelessWidget {
   Widget build(BuildContext context) => MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => SettingsService(_sharedPreferences), lazy: false),
+          ChangeNotifierProvider(create: (_) => HaService(), lazy: false),
           ChangeNotifierProvider(create: (_) => AppsService(_fLauncherChannel, _fLauncherDatabase)),
           ChangeNotifierProxyProvider<SettingsService, WallpaperService>(
               create: (_) => WallpaperService(_imagePicker, _fLauncherChannel),

@@ -19,6 +19,7 @@ dependencies:
   shared_preferences: ^2.0.18
   sqlite3_flutter_libs: ^0.6.0+eol
   webview_flutter: ^4.0.5
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:
