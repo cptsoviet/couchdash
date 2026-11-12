@@ -50,7 +50,7 @@ class WallpaperPanelPage extends StatelessWidget {
               children: [
                 Icon(Icons.nightlight_round),
                 Container(width: 8),
-                Text("Mood wallpaper (Home Assistant)", style: Theme.of(context).textTheme.bodyMedium),
+                Text("Wallpaper from Home Assistant", style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
             onPressed: () => Navigator.of(context).pushNamed(MoodPanelPage.routeName),

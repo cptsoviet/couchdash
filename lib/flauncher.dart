@@ -129,15 +129,15 @@ class FLauncher extends StatelessWidget {
         ),
       );
 
-  // kronie-ha fork: normal wallpaper, or the mood wallpaper while its HA entity is "on"; crossfades between them
+  // kronie-ha fork: the wallpaper HA picked (input_select), else the local one; crossfades on every change
   Widget _background(BuildContext context) {
     final wallpaper = context.watch<WallpaperService>();
     final settings = context.watch<SettingsService>();
-    final moodEntity = settings.moodEntity;
-    final moodState = context.select<HaService, String?>((ha) => moodEntity == null ? null : ha.states[moodEntity]?["state"]);
+    final haChoice = context.select<HaService, String?>(
+        (ha) => settings.haWallpaperEnabled ? (ha.states[SettingsService.haWallpaperEntity]?["state"] as String?) : null);
+    final mood = FLauncherGradients.byName(haChoice);
     final Widget child;
-    if (moodState == "on") {
-      final mood = FLauncherGradients.byUuid(settings.moodGradientUuid);
+    if (mood != null) {
       child = KeyedSubtree(key: ValueKey("mood-${mood.uuid}"), child: mood.background());
     } else {
       final bytes = wallpaper.wallpaperBytes;

@@ -1,6 +1,7 @@
 /*
- * kronie-ha fork: Settings -> Wallpaper -> Mood wallpaper.
- * Crossfades to a second background while the chosen HA entity is "on".
+ * kronie-ha fork: Settings -> Wallpaper -> Wallpaper from Home Assistant.
+ * HA picks the wallpaper through input_select.tv_launcher_wallpaper (option = wallpaper name), usually from
+ * an automation; the launcher crossfades when it changes. Unknown/missing value -> the local wallpaper.
  */
 
 import 'package:flauncher/gradients.dart';
@@ -11,25 +12,25 @@ import 'package:provider/provider.dart';
 
 class MoodPanelPage extends StatelessWidget {
   static const String routeName = "mood_panel";
-  static const _triggerDomains = ["binary_sensor", "input_boolean", "switch", "light"];
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsService>();
     final ha = context.watch<HaService>();
-    final candidates = ha.states.keys.where((id) => _triggerDomains.contains(id.split(".").first)).toList()
-      ..sort((a, b) => _label(ha, a).toLowerCase().compareTo(_label(ha, b).toLowerCase()));
-    final current = settings.moodEntity;
-    if (current != null && !candidates.contains(current)) candidates.insert(0, current);
-    final mood = FLauncherGradients.byUuid(settings.moodGradientUuid);
-    TextStyle? header = Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white60);
-    final triggerState = current == null ? null : ha.states[current]?["state"];
-    final status = current == null
-        ? "No trigger chosen: the normal wallpaper always shows."
-        : "Trigger: ${_label(ha, current)} is ${triggerState ?? "unknown"}"
-            "${triggerState == "on" ? " → showing ${mood.name}" : " → showing the normal wallpaper"}";
+    final value = ha.states[SettingsService.haWallpaperEntity]?["state"] as String?;
+    final known = FLauncherGradients.byName(value) != null;
+    final status = !settings.haWallpaperEnabled
+        ? "Off: the wallpaper set on the TV is always used."
+        : !ha.connected
+            ? "Home Assistant not connected: using the TV's own wallpaper."
+            : value == null
+                ? "${SettingsService.haWallpaperEntity} not found in Home Assistant: using the TV's own wallpaper."
+                : known
+                    ? "Home Assistant says: $value"
+                    : "Home Assistant says \"$value\", which isn't a wallpaper name here: using the TV's own wallpaper.";
+    final header = Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white60);
     return Column(children: [
-      Text("Mood wallpaper", style: Theme.of(context).textTheme.titleLarge),
+      Text("HA wallpaper", style: Theme.of(context).textTheme.titleLarge),
       Divider(),
       Container(
         width: double.infinity,
@@ -40,15 +41,19 @@ class MoodPanelPage extends StatelessWidget {
       ),
       Expanded(
         child: ListView(children: [
-          Padding(padding: EdgeInsets.fromLTRB(8, 4, 8, 4), child: Text("Wallpaper", style: header)),
-          for (final g in FLauncherGradients.all)
-            _Choice<String>(
-              autofocus: g.uuid == mood.uuid,
-              value: g.uuid,
-              groupValue: mood.uuid,
-              title: Text(g.name),
-              onChanged: (v) => settings.setMoodGradientUuid(v!),
-            ),
+          _Choice<bool>(
+            autofocus: true,
+            value: true,
+            groupValue: settings.haWallpaperEnabled,
+            title: Text("Let Home Assistant choose"),
+            onChanged: (_) => settings.setHaWallpaperEnabled(true),
+          ),
+          _Choice<bool>(
+            value: false,
+            groupValue: settings.haWallpaperEnabled,
+            title: Text("Always use the TV's wallpaper"),
+            onChanged: (_) => settings.setHaWallpaperEnabled(false),
+          ),
           Padding(padding: EdgeInsets.fromLTRB(8, 12, 8, 4), child: Text("Fade", style: header)),
           for (final ms in [1000, 2000, 3000, 5000])
             _Choice<int>(
@@ -57,28 +62,18 @@ class MoodPanelPage extends StatelessWidget {
               title: Text("${ms ~/ 1000} s"),
               onChanged: (v) => settings.setMoodFadeMs(v!),
             ),
-          Padding(padding: EdgeInsets.fromLTRB(8, 12, 8, 4), child: Text("Show it while this is on", style: header)),
-          _Choice<String?>(
-            value: null,
-            groupValue: current,
-            title: Text("Never (off)"),
-            onChanged: (_) => settings.setMoodEntity(null),
-          ),
-          if (!ha.connected) Padding(padding: EdgeInsets.all(8), child: Text("Home Assistant not connected")),
-          for (final id in candidates)
-            _Choice<String?>(
-              value: id,
-              groupValue: current,
-              title: Text(_label(ha, id)),
-              subtitle: Text("$id · ${ha.states[id]?["state"] ?? "?"}"),
-              onChanged: (v) => settings.setMoodEntity(v),
+          Padding(
+            padding: EdgeInsets.fromLTRB(8, 16, 8, 8),
+            child: Text(
+              "Set in HA: ${SettingsService.haWallpaperEntity}, options = wallpaper names "
+              "(e.g. Backglow, True Black (OLED)). Change it from automations, your phone or voice.",
+              style: TextStyle(fontSize: 11, color: Colors.white54),
             ),
+          ),
         ]),
       ),
     ]);
   }
-
-  String _label(HaService ha, String id) => "${ha.states[id]?["attributes"]?["friendly_name"] ?? id}";
 }
 
 /// Radio row with a clearly visible focus highlight (RadioListTile shows none on this theme).
