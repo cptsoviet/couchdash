@@ -24,6 +24,13 @@ class HaConfigStore {
     return Map<String, dynamic>.from(jsonDecode(await file.readAsString()));
   }
 
+  /// Merges [changes] into ha.json (a null value removes the key).
+  Future<void> update(Map<String, dynamic> changes) async {
+    final config = await read() ?? {};
+    changes.forEach((key, value) => value == null ? config.remove(key) : config[key] = value);
+    await _write(config);
+  }
+
   /// Stores new credentials. Keeps the other settings (dashboard, notifications, device_name, ...) and drops
   /// the credential keys of the other kind, so there is never a stale long-lived token next to an OAuth one.
   Future<void> saveCredentials(String url, {String? token, String? clientId, String? refreshToken}) async {
@@ -40,6 +47,10 @@ class HaConfigStore {
       config["client_id"] = clientId;
       config["refresh_token"] = refreshToken;
     }
+    await _write(config);
+  }
+
+  Future<void> _write(Map<String, dynamic> config) async {
     final file = await _file;
     final tmp = File("${file.path}.tmp");
     await tmp.writeAsString(JsonEncoder.withIndent("  ").convert(config), flush: true);

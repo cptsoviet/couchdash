@@ -156,11 +156,15 @@ class HaNotifyService : Service() {
         }
         maxAgeMs = config.optLong("offline_max_age_minutes", 10) * 60_000L
         val regFile = File(filesDir, "ha_registration.json")
-        webhookId = runCatching { JSONObject(regFile.readText()).getString("webhook_id") }.getOrNull()
+        val deviceName = config.optString("device_name").ifBlank { "Living Room TV" }
+        val registration = runCatching { JSONObject(regFile.readText()) }.getOrNull()
+        webhookId = registration?.optString("webhook_id")?.ifEmpty { null }
         if (webhookId == null) {
-            webhookId = register(config.optString("device_name", "Living Room TV"))?.also {
-                regFile.writeText(JSONObject().put("webhook_id", it).toString())
+            webhookId = register(deviceName)?.also {
+                regFile.writeText(JSONObject().put("webhook_id", it).put("device_name", deviceName).toString())
             }
+        } else if (registration?.optString("device_name") != deviceName && updateDeviceName(deviceName)) {
+            regFile.writeText(JSONObject().put("webhook_id", webhookId).put("device_name", deviceName).toString())
         }
         if (webhookId == null) {
             Log.w(TAG, "registration failed; retrying in 60 s")
@@ -191,6 +195,20 @@ class HaNotifyService : Service() {
         }
         true
     }.onFailure { Log.w(TAG, "token refresh: $it") }.getOrDefault(false)
+
+    /** Renamed on the TV: update the existing HA device instead of registering a second one. */
+    private fun updateDeviceName(deviceName: String): Boolean = runCatching {
+        val data = JSONObject()
+            .put("device_name", deviceName)
+            .put("app_version", packageManager.getPackageInfo(packageName, 0).versionName ?: "1")
+            .put("manufacturer", Build.MANUFACTURER)
+            .put("model", Build.MODEL)
+            .put("os_version", Build.VERSION.RELEASE)
+        val body = JSONObject().put("type", "update_registration").put("data", data)
+        http.newCall(Request.Builder().url("$baseUrl/api/webhook/$webhookId").post(body.toString().toRequestBody(json)).build())
+            .execute().use { r -> if (!r.isSuccessful) error("HTTP ${r.code}") }
+        true
+    }.onFailure { Log.w(TAG, "update_registration: $it") }.getOrDefault(false)
 
     private fun register(deviceName: String): String? {
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()

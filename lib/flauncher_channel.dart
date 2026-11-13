@@ -40,6 +40,12 @@ class FLauncherChannel {
   /// CouchDash: the notification service re-reads ha.json (after the setup flow saved new credentials)
   Future<void> restartHaNotify() async => await _methodChannel.invokeMethod('restartHaNotify');
 
+  /// CouchDash: the overlay permission HA notifications need ("Display over other apps")
+  Future<bool> canDrawOverlays() async => await _methodChannel.invokeMethod('canDrawOverlays');
+
+  /// false when this TV has no such settings screen
+  Future<bool> openOverlaySettings() async => await _methodChannel.invokeMethod('openOverlaySettings');
+
   Future<bool> isDefaultLauncher() async => await _methodChannel.invokeMethod('isDefaultLauncher');
 
   Future<bool> checkForGetContentAvailability() async =>

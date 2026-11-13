@@ -55,6 +55,8 @@ class MainActivity : FlutterActivity() {
                 "openSettings" -> result.success(openSettings())
                 "openAppInfo" -> result.success(openAppInfo(call.arguments as String))
                 "uninstallApp" -> result.success(uninstallApp(call.arguments as String))
+                "canDrawOverlays" -> result.success(Settings.canDrawOverlays(this))
+                "openOverlaySettings" -> result.success(openOverlaySettings())
                 "restartHaNotify" -> {
                     stopService(Intent(this, HaNotifyService::class.java))
                     HaNotifyService.start(this)
@@ -170,6 +172,20 @@ class MainActivity : FlutterActivity() {
         true
     } catch (e: Exception) {
         false
+    }
+
+    // CouchDash: "Display over other apps" for this app; Android TV settings show the app list instead of the
+    // per-app toggle, and some TV builds have no such screen at all (-> false, the app shows the menu path)
+    private fun openOverlaySettings(): Boolean {
+        val withPackage = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+        for (intent in listOf(withPackage, Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))) {
+            try {
+                startActivity(intent)
+                return true
+            } catch (e: Exception) {
+            }
+        }
+        return false
     }
 
     private fun openAppInfo(packageName: String) = try {
