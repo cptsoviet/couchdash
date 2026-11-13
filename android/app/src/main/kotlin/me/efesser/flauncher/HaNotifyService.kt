@@ -8,6 +8,8 @@
  * Config: the same ha.json the launcher uses (getExternalFilesDir/ha.json). Notifications are OFF unless it has
  * "notifications": true; optional "device_name" (default "Living Room TV"), "offline_max_age_minutes" (default 10).
  * Registration is cached in filesDir/ha_registration.json (delete it to re-register).
+ * Credentials: "token" (long-lived), or "client_id" + "refresh_token" from the QR setup flow; the 30-minute access
+ * token is then refreshed here in memory every 20 minutes (the Flutter side refreshes its own; nothing is written back).
  */
 package me.efesser.flauncher
 
@@ -32,6 +34,7 @@ import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -46,6 +49,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "HaNotify"
+private const val REFRESH_MS = 20 * 60_000L
 private const val CHANNEL_ID = "ha_notify_service"
 
 class HaNotifyService : Service() {
@@ -63,7 +67,9 @@ class HaNotifyService : Service() {
     private val json = "application/json".toMediaType()
 
     private var baseUrl: String? = null
-    private var token: String? = null
+    @Volatile private var token: String? = null
+    private var clientId: String? = null
+    private var refreshToken: String? = null
     private var webhookId: String? = null
     private var maxAgeMs = 10 * 60_000L
     private var socket: WebSocket? = null
@@ -108,6 +114,7 @@ class HaNotifyService : Service() {
 
     override fun onDestroy() {
         stopped = true
+        main.removeCallbacksAndMessages(null)
         socket?.close(1000, null)
         unregisterReceiver(screenOn)
         tts?.shutdown()
@@ -136,7 +143,17 @@ class HaNotifyService : Service() {
             return
         }
         baseUrl = config.getString("url").trimEnd('/')
-        token = config.getString("token")
+        refreshToken = config.optString("refresh_token").ifEmpty { null }
+        clientId = config.optString("client_id").ifEmpty { null }
+        if (refreshToken != null && clientId != null) {
+            if (!refreshAccessToken()) {
+                main.postDelayed({ Thread { setUp() }.start() }, 60_000)
+                return
+            }
+            main.postDelayed(refreshLoop, REFRESH_MS)
+        } else {
+            token = config.getString("token")
+        }
         maxAgeMs = config.optLong("offline_max_age_minutes", 10) * 60_000L
         val regFile = File(filesDir, "ha_registration.json")
         webhookId = runCatching { JSONObject(regFile.readText()).getString("webhook_id") }.getOrNull()
@@ -152,6 +169,28 @@ class HaNotifyService : Service() {
         }
         main.post { connect() }
     }
+
+    private val refreshLoop: Runnable = object : Runnable {
+        override fun run() {
+            if (stopped) return
+            Thread { refreshAccessToken() }.start() // on failure the old token still works until it expires; retry next round
+            main.postDelayed(this, REFRESH_MS)
+        }
+    }
+
+    /** OAuth refresh_token grant; HA access tokens last 30 minutes. */
+    private fun refreshAccessToken(): Boolean = runCatching {
+        val form = FormBody.Builder()
+            .add("grant_type", "refresh_token")
+            .add("refresh_token", refreshToken!!)
+            .add("client_id", clientId!!)
+            .build()
+        http.newCall(Request.Builder().url("$baseUrl/auth/token").post(form).build()).execute().use { r ->
+            if (!r.isSuccessful) error("HTTP ${r.code}${if (r.code == 400) " (login revoked? set up again)" else ""}")
+            token = JSONObject(r.body!!.string()).getString("access_token")
+        }
+        true
+    }.onFailure { Log.w(TAG, "token refresh: $it") }.getOrDefault(false)
 
     private fun register(deviceName: String): String? {
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()

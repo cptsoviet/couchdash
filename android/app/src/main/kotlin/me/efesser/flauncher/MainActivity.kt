@@ -55,6 +55,11 @@ class MainActivity : FlutterActivity() {
                 "openSettings" -> result.success(openSettings())
                 "openAppInfo" -> result.success(openAppInfo(call.arguments as String))
                 "uninstallApp" -> result.success(uninstallApp(call.arguments as String))
+                "restartHaNotify" -> {
+                    stopService(Intent(this, HaNotifyService::class.java))
+                    HaNotifyService.start(this)
+                    result.success(null)
+                }
                 "isDefaultLauncher" -> result.success(isDefaultLauncher())
                 "checkForGetContentAvailability" -> result.success(checkForGetContentAvailability())
                 "startAmbientMode" -> result.success(startAmbientMode())

@@ -3,21 +3,24 @@
  * Config is a JSON file pushed over adb to the app's external files dir:
  *   /sdcard/Android/data/app.couchdash.launcher/files/ha.json
  *   {"url": "http://<ha>:8123", "token": "<long-lived token>", "dashboard": "tv-launcher"}
+ * or, after the QR setup flow, "client_id" + "refresh_token" instead of "token" (see ha_auth.dart).
  * The layout comes from that HA dashboard's first view, so tiles are changed in HA, not here.
  */
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/io.dart';
+
+import 'ha_auth.dart';
+import 'ha_config.dart';
 
 class HaService extends ChangeNotifier with WidgetsBindingObserver {
   String? url;
-  String? _token;
+  HaAuth? _auth;
+  final HaConfigStore configStore;
   String dashboard = "tv-launcher";
 
   bool connected = false;
@@ -32,11 +35,13 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _minuteTimer;
   int _backoffSeconds = 2;
 
-  HaService() {
+  HaService({HaConfigStore? configStore}) : configStore = configStore ?? HaConfigStore() {
     WidgetsBinding.instance.addObserver(this);
     // re-evaluate time-based card visibility every minute
     _minuteTimer = Timer.periodic(Duration(minutes: 1), (_) {
       if (cards.any((c) => c["visibility"] != null)) notifyListeners();
+      // keep the OAuth access token fresh for camera image headers (no-op for long-lived tokens)
+      if (connected) _auth?.accessToken().catchError((_) => "");
     });
     _start();
   }
@@ -54,18 +59,16 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
 
   bool get configured => url != null;
 
-  Map<String, String> get authHeaders => {"Authorization": "Bearer $_token"};
+  Map<String, String> get authHeaders => {"Authorization": "Bearer ${_auth?.cachedToken}"};
 
   String cameraUrl(String entityId) => "$url/api/camera_proxy/$entityId?t=${DateTime.now().millisecondsSinceEpoch}";
 
   Future<void> _start() async {
     try {
-      final dir = await getExternalStorageDirectory();
-      final file = File("${dir!.path}/ha.json");
-      if (!await file.exists()) return; // not set up: the launcher simply shows no HA row
-      final config = jsonDecode(await file.readAsString());
-      url = (config["url"] as String).replaceAll(RegExp(r"/+$"), "");
-      _token = config["token"];
+      final config = await configStore.read();
+      if (config == null) return; // not set up: the launcher simply shows no HA row
+      url = HaConfigStore.normaliseUrl(config["url"] as String);
+      _auth = HaAuth.fromConfig(url!, config);
       dashboard = config["dashboard"] ?? dashboard;
     } catch (e) {
       error = "HA config: $e";
@@ -82,7 +85,9 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
       final ws = base.replace(scheme: base.scheme == "https" ? "wss" : "ws", path: "/api/websocket");
       final channel = IOWebSocketChannel.connect(ws, pingInterval: Duration(seconds: 30));
       _channel = channel;
-      channel.stream.listen(_onMessage, onDone: _onLost, onError: (_) => _onLost());
+      // ignore the old socket's close after reload() replaced it
+      void lost() => identical(channel, _channel) ? _onLost() : null;
+      channel.stream.listen(_onMessage, onDone: lost, onError: (_) => lost());
     } catch (e) {
       _onLost();
     }
@@ -114,10 +119,16 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
     final message = jsonDecode(data as String);
     switch (message["type"]) {
       case "auth_required":
-        _send({"type": "auth", "access_token": _token});
+        try {
+          _send({"type": "auth", "access_token": await _auth!.accessToken()});
+        } on HaAuthException catch (e) {
+          error = e.revoked ? "HA login expired: set up Home Assistant again" : "HA: $e";
+          notifyListeners();
+          _channel?.sink.close(); // retried with backoff; a revoked login keeps failing until set up again
+        }
         break;
       case "auth_invalid":
-        error = "HA rejected the token";
+        error = "HA rejected the login";
         notifyListeners();
         _channel?.sink.close();
         break;
@@ -287,6 +298,23 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
         "service": "toggle",
         "target": {"entity_id": entityId},
       }).catchError((_) {});
+
+  /// Re-reads ha.json and reconnects (after the setup flow saved new credentials).
+  Future<void> reload() async {
+    _retryTimer?.cancel();
+    final old = _channel;
+    _channel = null;
+    old?.sink.close();
+    connected = false;
+    error = null;
+    _backoffSeconds = 2;
+    _auth = null;
+    url = null;
+    cards = [];
+    states.clear();
+    notifyListeners();
+    await _start();
+  }
 
   @override
   void dispose() {

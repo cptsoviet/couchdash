@@ -37,6 +37,9 @@ class FLauncherChannel {
 
   Future<void> uninstallApp(String packageName) async => await _methodChannel.invokeMethod('uninstallApp', packageName);
 
+  /// CouchDash: the notification service re-reads ha.json (after the setup flow saved new credentials)
+  Future<void> restartHaNotify() async => await _methodChannel.invokeMethod('restartHaNotify');
+
   Future<bool> isDefaultLauncher() async => await _methodChannel.invokeMethod('isDefaultLauncher');
 
   Future<bool> checkForGetContentAvailability() async =>
