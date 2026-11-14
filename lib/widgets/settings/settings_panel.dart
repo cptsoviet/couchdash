@@ -47,33 +47,38 @@ class _SettingsPanelState extends State<SettingsPanel> {
           backgroundColor: Colors.transparent,
           body: RightPanelDialog(
             width: 350,
-            child: Navigator(
-              key: _navigatorKey,
-              initialRoute: widget.initialRoute ?? SettingsPanelPage.routeName,
-              onGenerateRoute: (settings) {
-                switch (settings.name) {
-                  case SettingsPanelPage.routeName:
-                    return MaterialPageRoute(builder: (_) => SettingsPanelPage());
-                  case WallpaperPanelPage.routeName:
-                    return MaterialPageRoute(builder: (_) => WallpaperPanelPage());
-                  case HaSetupPanelPage.routeName:
-                    return MaterialPageRoute(builder: (_) => HaSetupPanelPage());
-                  case MoodPanelPage.routeName:
-                    return MaterialPageRoute(builder: (_) => MoodPanelPage());
-                  case GradientPanelPage.routeName:
-                    return MaterialPageRoute(builder: (_) => GradientPanelPage());
-                  case ApplicationsPanelPage.routeName:
-                    return MaterialPageRoute(builder: (_) => ApplicationsPanelPage());
-                  case CategoriesPanelPage.routeName:
-                    return MaterialPageRoute(builder: (_) => CategoriesPanelPage());
-                  case CategoryPanelPage.routeName:
-                    return MaterialPageRoute(
-                      builder: (_) => CategoryPanelPage(categoryId: settings.arguments! as int),
-                    );
-                  default:
-                    throw ArgumentError.value(settings.name, "settings.name", "Route not supported.");
-                }
-              },
+            // CouchDash: list tiles (the toggles) paint their focus highlight on the nearest Material; without this
+            // one it is the Scaffold's, underneath the panel's blue, so the highlight was invisible
+            child: Material(
+              type: MaterialType.transparency,
+              child: Navigator(
+                key: _navigatorKey,
+                initialRoute: widget.initialRoute ?? SettingsPanelPage.routeName,
+                onGenerateRoute: (settings) {
+                  switch (settings.name) {
+                    case SettingsPanelPage.routeName:
+                      return MaterialPageRoute(builder: (_) => SettingsPanelPage());
+                    case WallpaperPanelPage.routeName:
+                      return MaterialPageRoute(builder: (_) => WallpaperPanelPage());
+                    case HaSetupPanelPage.routeName:
+                      return MaterialPageRoute(builder: (_) => HaSetupPanelPage());
+                    case MoodPanelPage.routeName:
+                      return MaterialPageRoute(builder: (_) => MoodPanelPage());
+                    case GradientPanelPage.routeName:
+                      return MaterialPageRoute(builder: (_) => GradientPanelPage());
+                    case ApplicationsPanelPage.routeName:
+                      return MaterialPageRoute(builder: (_) => ApplicationsPanelPage());
+                    case CategoriesPanelPage.routeName:
+                      return MaterialPageRoute(builder: (_) => CategoriesPanelPage());
+                    case CategoryPanelPage.routeName:
+                      return MaterialPageRoute(
+                        builder: (_) => CategoryPanelPage(categoryId: settings.arguments! as int),
+                      );
+                    default:
+                      throw ArgumentError.value(settings.name, "settings.name", "Route not supported.");
+                  }
+                },
+              ),
             ),
           ),
         ),

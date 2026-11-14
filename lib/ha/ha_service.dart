@@ -11,6 +11,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flauncher/flauncher_channel.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:web_socket_channel/io.dart';
 
@@ -35,8 +37,18 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _minuteTimer;
   int _backoffSeconds = 2;
 
+  // remote shortcuts (ha.json "shortcuts"); the native accessibility service handles them in every app when it is on,
+  // else long-press Menu is caught here while the launcher is in front
+  final _launcherChannel = FLauncherChannel();
+  Map<String, dynamic>? menuLongShortcut;
+  bool buttonServiceEnabled = false;
+  bool buttonServiceStuck = false; // switched on, but Android won't run it until it's turned off and on
+  Duration? _menuDownAt;
+  bool _menuFired = false;
+
   HaService({HaConfigStore? configStore}) : configStore = configStore ?? HaConfigStore() {
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_onKey);
     // re-evaluate time-based card visibility every minute
     _minuteTimer = Timer.periodic(Duration(minutes: 1), (_) {
       if (cards.any((c) => c["visibility"] != null)) notifyListeners();
@@ -49,6 +61,7 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
   // back on the home screen: refresh the dashboard (belt and braces next to lovelace_updated)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) refreshButtonService();
     if (state != AppLifecycleState.resumed || !configured) return;
     if (connected) {
       _loadDashboard().catchError((_) {});
@@ -67,6 +80,7 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final config = await configStore.read();
       if (config == null) return; // not set up: the launcher simply shows no HA row
+      readShortcuts(config);
       url = HaConfigStore.normaliseUrl(config["url"] as String);
       _auth = HaAuth.fromConfig(url!, config);
       dashboard = config["dashboard"] ?? dashboard;
@@ -85,9 +99,17 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
       final ws = base.replace(scheme: base.scheme == "https" ? "wss" : "ws", path: "/api/websocket");
       final channel = IOWebSocketChannel.connect(ws, pingInterval: Duration(seconds: 30));
       _channel = channel;
-      // ignore the old socket's close after reload() replaced it
-      void lost() => identical(channel, _channel) ? _onLost() : null;
+      // ignore the old socket's close after reload() replaced it; once per socket (ready and the stream both report)
+      var reported = false;
+      void lost() {
+        if (reported || !identical(channel, _channel)) return;
+        reported = true;
+        _onLost();
+      }
+
       channel.stream.listen(_onMessage, onDone: lost, onError: (_) => lost());
+      // a failed connect (e.g. no network yet right after boot) is reported here, not on the stream: retry right away
+      channel.ready.catchError((_) => lost());
     } catch (e) {
       _onLost();
     }
@@ -283,7 +305,8 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
         if (svc == null || !svc.contains(".")) return false;
         final parts = svc.split(".");
         callService(parts[0], parts[1],
-            data: Map<String, dynamic>.from(action?["data"] ?? action?["service_data"] ?? {}), target: action?["target"]);
+            data: Map<String, dynamic>.from(action?["data"] ?? action?["service_data"] ?? {}),
+            target: action?["target"]);
         return false;
       case "more-info":
         return true;
@@ -298,6 +321,48 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
         "service": "toggle",
         "target": {"entity_id": entityId},
       }).catchError((_) {});
+
+  /// Picks up the "shortcuts" part of ha.json (after Settings changed it, or on start).
+  void readShortcuts(Map<String, dynamic> config) {
+    final menuLong = (config["shortcuts"] as Map?)?["menu_long"];
+    menuLongShortcut = menuLong is Map ? Map<String, dynamic>.from(menuLong) : null;
+    refreshButtonService();
+    notifyListeners();
+  }
+
+  Future<void> refreshButtonService() async {
+    final state = await _launcherChannel.buttonServiceState().catchError((_) => "off");
+    if ((state == "on") != buttonServiceEnabled || (state == "stuck") != buttonServiceStuck) {
+      buttonServiceEnabled = state == "on";
+      buttonServiceStuck = state == "stuck";
+      notifyListeners();
+    }
+  }
+
+  // long-press Menu (≡) on the launcher itself; a short press passes through untouched
+  bool _onKey(KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.contextMenu || buttonServiceEnabled || menuLongShortcut == null) {
+      return false;
+    }
+    if (event is KeyDownEvent) {
+      _menuDownAt = event.timeStamp;
+      _menuFired = false;
+      return false;
+    }
+    if (event is KeyRepeatEvent) {
+      if (_menuFired) return true;
+      if (_menuDownAt != null && event.timeStamp - _menuDownAt! >= Duration(milliseconds: 500)) {
+        _menuFired = true;
+        _launcherChannel.runShortcut("menu_long", "menu", "long").catchError((_) {});
+        return true;
+      }
+      return false;
+    }
+    final fired = _menuFired; // KeyUpEvent
+    _menuFired = false;
+    _menuDownAt = null;
+    return fired;
+  }
 
   /// Re-reads ha.json and reconnects (after the setup flow saved new credentials).
   Future<void> reload() async {
@@ -319,6 +384,7 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    HardwareKeyboard.instance.removeHandler(_onKey);
     _minuteTimer?.cancel();
     _retryTimer?.cancel();
     _channel?.sink.close();

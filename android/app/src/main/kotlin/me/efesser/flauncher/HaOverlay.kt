@@ -78,6 +78,30 @@ class HaOverlay(private val context: Context, private val onAction: (String, JSO
         critical?.takeIf { it.tag == tag }?.let { removeCritical() }
     }
 
+    /**
+     * After the screensaver or sleep another window holds the remote's focus, and an overlay window can't take it back
+     * by itself, so cards with buttons would be stuck. Re-adding a window makes the system focus it again.
+     */
+    fun regainFocus() {
+        cornerRoot?.takeIf { corner.any { it.focusable } }?.let { readd(it) }
+        critical?.let { readd(it.view) }
+    }
+
+    private fun readd(view: View) {
+        val lp = view.layoutParams as? WindowManager.LayoutParams ?: return
+        runCatching {
+            wm.removeViewImmediate(view)
+            wm.addView(view, lp)
+        }.onFailure { return }
+        view.post { firstFocusable(view)?.requestFocus() }
+    }
+
+    // a button if there is one, else the view itself (the dimmed critical backdrop takes Back)
+    private fun firstFocusable(v: View): View? {
+        if (v is ViewGroup) for (i in 0 until v.childCount) firstFocusable(v.getChildAt(i))?.let { return it }
+        return if (v.isFocusable) v else null
+    }
+
     fun clearAll() {
         corner.toList().forEach { removeCard(it) }
         chips.toList().forEach { removeChip(it) }
@@ -190,7 +214,10 @@ class HaOverlay(private val context: Context, private val onAction: (String, JSO
             if (first == null) first = b
         }
         if (row.childCount > 0) body.addView(row)
-        body.addView(text(if (row.childCount > 0) "Back = dismiss" else "", 11f, Color.argb(110, 255, 255, 255)))
+        // no timeout: the remote has to be able to close it, buttons or not
+        if (row.childCount > 0 || (data.has("duration") && data.optLong("duration") <= 0)) {
+            body.addView(text("Back = dismiss", 11f, Color.argb(110, 255, 255, 255)))
+        }
         box.addView(body)
         first?.post { first.requestFocus() }
         return box
@@ -205,7 +232,17 @@ class HaOverlay(private val context: Context, private val onAction: (String, JSO
             clipToOutline = true
         }
         card.addView(content(n, data, baseUrl, token, { corner.firstOrNull { it === item } }, Color.WHITE, false) { removeCard(item) })
-        item = Item(tag, card, hasActions, "card")
+        // a card that never times out takes the remote's focus too, else nothing could close it; Back or OK does
+        val sticky = durationMs(data, hasActions) == null
+        if (sticky && !hasActions) {
+            card.isFocusable = true
+            card.setOnKeyListener { _, code, e ->
+                val close = code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                if (close && e.action == KeyEvent.ACTION_UP) removeCard(item)
+                close
+            }
+        }
+        item = Item(tag, card, hasActions || sticky, "card")
         val root = cornerRoot ?: LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }.also {
             cornerRoot = it
             wm.addView(it, params(hasActions, false, Gravity.TOP or Gravity.END))
@@ -213,6 +250,7 @@ class HaOverlay(private val context: Context, private val onAction: (String, JSO
         root.addView(card, LinearLayout.LayoutParams(dp(360f), ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12f) })
         corner.add(item)
         refreshCornerFocus()
+        if (sticky && !hasActions) card.post { card.requestFocus() }
         durationMs(data, hasActions)?.let { ms -> item.dismiss = Runnable { removeCard(item) }.also { main.postDelayed(it, ms) } }
     }
 

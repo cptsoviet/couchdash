@@ -46,6 +46,17 @@ class FLauncherChannel {
   /// false when this TV has no such settings screen
   Future<bool> openOverlaySettings() async => await _methodChannel.invokeMethod('openOverlaySettings');
 
+  /// CouchDash: the accessibility service that sees remote buttons in every app (HaButtonService):
+  /// "on", "off", or "stuck" (switched on but not running until it's turned off and on, e.g. after an app update)
+  Future<String> buttonServiceState() async => await _methodChannel.invokeMethod('buttonServiceState');
+
+  /// false when this TV has no accessibility settings screen
+  Future<bool> openAccessibilitySettings() async => await _methodChannel.invokeMethod('openAccessibilitySettings');
+
+  /// runs the remote shortcut stored in ha.json under [key] (native side, same code as the accessibility service)
+  Future<void> runShortcut(String key, String button, String press) async =>
+      await _methodChannel.invokeMethod('runShortcut', {"key": key, "button": button, "press": press});
+
   Future<bool> isDefaultLauncher() async => await _methodChannel.invokeMethod('isDefaultLauncher');
 
   Future<bool> checkForGetContentAvailability() async =>

@@ -7,6 +7,10 @@ import 'package:flutter/material.dart';
 /// Going up or down will always go to the next or previous row. All other
 /// traversal policy try to be smart, and in some cases can skip rows when
 /// going up or down.
+/// CouchDash: focus nodes whose rows wrap on left/right, by group ("apps", "ha-tiles"); each widget adds and removes
+/// its own. Wrapping stays inside a group, so the HA tiles cycle among themselves and the app icons among theirs.
+final Map<FocusNode, String> wrapGroupOf = {};
+
 class RowByRowTraversalPolicy extends FocusTraversalPolicy with DirectionalFocusTraversalPolicyMixin {
   @override
   Iterable<FocusNode> sortDescendants(Iterable<FocusNode> descendants, FocusNode currentNode) => descendants;
@@ -21,12 +25,37 @@ class RowByRowTraversalPolicy extends FocusTraversalPolicy with DirectionalFocus
     NodeSearcher searcher = NodeSearcher(direction);
     List<CandidateNode> candidates = searcher.findCandidates(nodes, currentNode);
     if (candidates.isEmpty) {
+      final wrapped = _wrapAppRow(nodes, currentNode, direction);
+      if (wrapped != null) {
+        wrapped.requestFocus();
+        return true;
+      }
       return super.inDirection(currentNode, direction);
     }
     FocusNode nextNode = searcher.findBestFocusNode(candidates, currentNode);
     nextNode.requestFocus();
     return true;
   }
+}
+
+// CouchDash: right on the last item of a row goes to the first item of the next row (from the last row: the first
+// row); left on the first item goes to the last item of the previous row (from the first row: the last row).
+FocusNode? _wrapAppRow(List<FocusNode> nodes, FocusNode current, TraversalDirection direction) {
+  if (direction != TraversalDirection.left && direction != TraversalDirection.right) return null;
+  final group = wrapGroupOf[current];
+  if (group == null) return null;
+  final rows = <int, List<FocusNode>>{};
+  for (final node in nodes.where((n) => wrapGroupOf[n] == group)) {
+    rows.putIfAbsent(node.rect.center.dy.round(), () => []).add(node);
+  }
+  final ys = rows.keys.toList()..sort();
+  if (ys.isEmpty) return null;
+  final row = ys.indexOf(current.rect.center.dy.round());
+  if (row < 0) return null;
+  final right = direction == TraversalDirection.right;
+  final target = rows[ys[right ? (row + 1) % ys.length : (row - 1 + ys.length) % ys.length]]!
+    ..sort((a, b) => a.rect.center.dx.compareTo(b.rect.center.dx));
+  return right ? target.first : target.last;
 }
 
 class NodeSearcher {

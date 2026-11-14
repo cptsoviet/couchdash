@@ -1,7 +1,8 @@
 /*
  * CouchDash: Settings -> Home Assistant setup.
  * Not connected: a QR code for the phone setup page (ha/setup_server.dart); the server only runs while it's shown.
- * Connected: status, notifications on/off (with the overlay-permission prompt), device name, connect again.
+ * Connected: status, notifications on/off (with the overlay-permission prompt), device name, remote shortcuts (with
+ * the accessibility-service prompt), connect again.
  */
 
 import 'package:flauncher/flauncher_channel.dart';
@@ -141,6 +142,7 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
   String _deviceName = defaultDeviceName;
   bool? _canOverlay;
   bool _noOverlayScreen = false;
+  bool _noAccessibilityScreen = false;
 
   @override
   void initState() {
@@ -217,6 +219,69 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
     await _apply({"device_name": trimmed});
   }
 
+  static String _shortcutLabel(Map<String, dynamic>? shortcut) => switch (shortcut?["type"]) {
+        "script" || "scene" => "${shortcut!["name"] ?? shortcut["entity_id"]}",
+        "event" => "Send event to Home Assistant",
+        _ => "Nothing",
+      };
+
+  Future<void> _pickMenuLong() async {
+    final ha = context.read<HaService>();
+    // scripts and scenes this HA user can see, by name
+    final runnable = ha.states.values
+        .where((s) => "${s["entity_id"]}".startsWith("script.") || "${s["entity_id"]}".startsWith("scene."))
+        .map((s) => (id: "${s["entity_id"]}", name: "${s["attributes"]?["friendly_name"] ?? s["entity_id"]}"))
+        .toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final current = ha.menuLongShortcut;
+    // dialogContext: the popup's own navigator (the settings panel has a nested one; popping that closed the page)
+    Widget option(BuildContext dialogContext, String label, Map<String, dynamic>? value, {String? subtitle}) {
+      final selected = value?["type"] == current?["type"] && value?["entity_id"] == current?["entity_id"];
+      return SimpleDialogOption(
+        onPressed: () => Navigator.of(dialogContext).pop({"value": value}),
+        child: Row(children: [
+          Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 18),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label),
+              if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.white60)),
+            ]),
+          ),
+        ]),
+      );
+    }
+
+    final picked = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text("Long-press Menu"),
+        children: [
+          option(context, "Nothing", null),
+          option(context, "Send event to Home Assistant", {"type": "event"},
+              subtitle: "couchdash_button (button: menu, press: long) for your automations"),
+          for (final r in runnable)
+            option(context, r.name, {"type": r.id.split(".").first, "entity_id": r.id, "name": r.name}, subtitle: r.id),
+        ],
+      ),
+    );
+    if (picked == null) return; // dialog dismissed
+    final config = await _store.read() ?? {};
+    final shortcuts = Map<String, dynamic>.from(config["shortcuts"] as Map? ?? {});
+    if (picked["value"] == null) {
+      shortcuts.remove("menu_long");
+    } else {
+      shortcuts["menu_long"] = picked["value"];
+    }
+    await _store.update({"shortcuts": shortcuts.isEmpty ? null : shortcuts});
+    ha.readShortcuts(await _store.read() ?? {});
+  }
+
+  Future<void> _openAccessibilitySettings() async {
+    final opened = await _channel.openAccessibilitySettings().catchError((_) => false);
+    if (mounted) setState(() => _noAccessibilityScreen = !opened);
+  }
+
   @override
   Widget build(BuildContext context) {
     final ha = context.watch<HaService>();
@@ -267,6 +332,44 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text("The name this TV has in Home Assistant (notify.mobile_app_...).", style: small),
             ),
+            Divider(),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text("Remote shortcuts",
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white60)),
+            ),
+            TextButton(
+              onPressed: _pickMenuLong,
+              child: Row(children: [
+                Icon(Icons.menu),
+                Container(width: 8),
+                Expanded(
+                  child: Text("Hold Menu: ${_shortcutLabel(ha.menuLongShortcut)}",
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ),
+              ]),
+            ),
+            if (ha.menuLongShortcut != null && !ha.buttonServiceEnabled) ...[
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  ha.buttonServiceStuck
+                      // Android 11 parks the service after the app was updated or force-stopped
+                      ? "Android stopped CouchDash remote buttons (it does after an update). Turn it off and on again: "
+                          "Settings > Device Preferences > Accessibility > CouchDash remote buttons."
+                      : _noAccessibilityScreen
+                          ? "Allow CouchDash to see remote buttons, so this works in every app (now only on this screen): "
+                              "Settings > Device Preferences > Accessibility > CouchDash remote buttons."
+                          : "Allow CouchDash to see remote buttons, so this works in every app (now only on this screen).",
+                  style: small?.copyWith(color: Colors.amberAccent),
+                ),
+              ),
+              _noAccessibilityScreen
+                  // no direct link on this TV (e.g. the Shield): open Android settings at the top, the text has the path
+                  ? TextButton(
+                      onPressed: () => _channel.openSettings().catchError((_) {}), child: Text("Open Android settings"))
+                  : TextButton(onPressed: _openAccessibilitySettings, child: Text("Open settings")),
+            ],
             Divider(),
             TextButton(
               onPressed: widget.onConnectAgain,

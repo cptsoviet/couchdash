@@ -18,6 +18,7 @@
 
 import 'dart:async';
 
+import 'package:flauncher/custom_traversal_policy.dart';
 import 'package:flauncher/database.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
@@ -62,10 +63,13 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     ),
   );
   Color _lastBorderColor = Colors.white;
+  // CouchDash: registered so left/right can wrap between app rows (RowByRowTraversalPolicy)
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
+    wrapGroupOf[_focusNode] = "apps";
     _animation.addStatusListener((animationStatus) {
       switch (animationStatus) {
         case AnimationStatus.completed:
@@ -84,6 +88,8 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
+    wrapGroupOf.remove(_focusNode);
+    _focusNode.dispose();
     _animation.dispose();
     super.dispose();
   }
@@ -115,6 +121,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                 fit: StackFit.expand,
                 children: [
                   InkWell(
+                    focusNode: _focusNode,
                     autofocus: widget.autofocus,
                     focusColor: Colors.transparent,
                     onTap: () => _onPressed(context, null),

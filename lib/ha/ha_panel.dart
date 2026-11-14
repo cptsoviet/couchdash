@@ -9,6 +9,7 @@
 
 import 'dart:async';
 
+import 'package:flauncher/custom_traversal_policy.dart';
 import 'package:flauncher/ha/ha_popup.dart';
 import 'package:flauncher/ha/ha_service.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ import 'package:provider/provider.dart';
 
 const _tileWidth = 168.0;
 const _tileHeight = 96.0;
+const _tilesPerRow = 5; // the tiles wrap onto more rows instead of scrolling sideways
 
 class HaPanel extends StatelessWidget {
   @override
@@ -58,25 +60,25 @@ class HaPanel extends StatelessWidget {
                   ]),
                 ),
               if (tiles.isNotEmpty)
-                SizedBox(
-                  height: _tileHeight + 24,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
+                LayoutBuilder(builder: (context, constraints) {
+                  // _tilesPerRow full tiles across the width, same shape as before
+                  final width = (constraints.maxWidth - 16 - 16 * (_tilesPerRow - 1)) / _tilesPerRow;
+                  return Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                    children: [
+                    child: Wrap(spacing: 16, runSpacing: 16, children: [
                       for (final t in tiles)
-                        Padding(
-                          padding: EdgeInsets.only(right: 16),
+                        SizedBox(
+                          width: width,
+                          height: width * _tileHeight / _tileWidth,
                           child: t["type"] == "tile"
                               ? _HaTile(t)
                               : t["type"] == "button"
                                   ? _ButtonTile(t)
                                   : _CameraTile(t),
                         ),
-                    ],
-                  ),
-                ),
+                    ]),
+                  );
+                }),
             ],
           ),
         );
@@ -162,6 +164,23 @@ const _mdi = <String, IconData>{
   "mdi:palette": Icons.palette_outlined,
   "mdi:power": Icons.power_settings_new,
   "mdi:home": Icons.home_outlined,
+  "mdi:home-outline": Icons.home_outlined,
+  "mdi:home-thermometer": Icons.home_outlined,
+  "mdi:home-thermometer-outline": Icons.home_outlined,
+  "mdi:thermometer": Icons.thermostat,
+  "mdi:water-percent": Icons.water_drop_outlined,
+  "mdi:water": Icons.water_drop_outlined,
+  "mdi:air-filter": Icons.air,
+  "mdi:air-purifier": Icons.air,
+  "mdi:leaf": Icons.eco_outlined,
+  "mdi:weather-windy": Icons.air,
+  "mdi:lightning-bolt": Icons.bolt,
+  "mdi:flash": Icons.bolt,
+  "mdi:power-plug": Icons.power_outlined,
+  "mdi:door": Icons.door_front_door_outlined,
+  "mdi:battery": Icons.battery_full,
+  "mdi:timer": Icons.timer_outlined,
+  "mdi:information": Icons.info_outline,
 };
 
 IconData _cardIcon(Map<String, dynamic> card, String entityId, Map<String, dynamic>? state) =>
@@ -232,7 +251,8 @@ class _Pill extends StatelessWidget {
           if (icon != null) ...[Icon(icon, size: 15, color: iconColor ?? Colors.white70), SizedBox(width: 6)],
           Text.rich(
             TextSpan(children: [
-              TextSpan(text: value == null ? text : "$text: "),
+              // name: "" in the dashboard = value only (e.g. one combined "🌡 80°  💧 47%" pill)
+              if (text.isNotEmpty) TextSpan(text: value == null ? text : "$text: "),
               if (value != null) TextSpan(text: value, style: TextStyle(fontWeight: FontWeight.w700)),
             ]),
             style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.92)),
@@ -268,7 +288,8 @@ class _EntityPill extends StatelessWidget {
           "door" || "opening" => s == "on" ? Icons.door_front_door_outlined : Icons.door_front_door,
           _ => Icons.sensors,
         },
-      _ => _icon(entityId, state),
+      // the HA icon (card entity "icon:", else the entity's own) when there is a Material match
+      _ => _mdi[entry["icon"] ?? state?["attributes"]?["icon"]] ?? _icon(entityId, state),
           };
     return _Pill(
       text: _name(entry, state),
@@ -301,6 +322,14 @@ class _TileFrameState extends State<_TileFrame> {
   bool _focused = false;
   bool _pressed = false;
   Timer? _holdTimer;
+  // left/right wrap between the tile rows (RowByRowTraversalPolicy)
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    wrapGroupOf[_focusNode] = "ha-tiles";
+  }
 
   bool _isSelectKey(KeyEvent e) =>
       e.logicalKey == LogicalKeyboardKey.select ||
@@ -332,11 +361,14 @@ class _TileFrameState extends State<_TileFrame> {
   @override
   void dispose() {
     _holdTimer?.cancel();
+    wrapGroupOf.remove(_focusNode);
+    _focusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Focus(
+        focusNode: _focusNode,
         onFocusChange: (f) {
           setState(() => _focused = f);
           if (f) Scrollable.ensureVisible(context, alignment: 0.5, duration: Duration(milliseconds: 150));
@@ -348,8 +380,9 @@ class _TileFrameState extends State<_TileFrame> {
           duration: _pressed ? _holdTime : Duration(milliseconds: 150),
           child: AnimatedContainer(
             duration: Duration(milliseconds: 150),
-            width: _tileWidth,
-            height: _tileHeight,
+            // fills the size the panel gives it (_tilesPerRow across)
+            width: double.infinity,
+            height: double.infinity,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: _focused
@@ -392,7 +425,13 @@ class _HaTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(_cardIcon(card, entityId, state), size: 22),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(_cardIcon(card, entityId, state), size: 22),
+              Spacer(),
+              // has a popup menu (hold, or tap by default): small "more" badge in the corner
+              if (haTileHasPopup(context, context.read<HaService>(), card))
+                Icon(Icons.more_horiz, size: 18, color: Colors.white54),
+            ]),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(_name(card, state),
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.white70)),

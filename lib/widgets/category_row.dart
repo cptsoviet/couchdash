@@ -25,6 +25,8 @@ import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+const _appsPerRow = 5;
+
 class CategoryRow extends StatelessWidget {
   final Category category;
   final List<App> applications;
@@ -50,38 +52,34 @@ class CategoryRow extends StatelessWidget {
                     .titleLarge!
                     .copyWith(shadows: [Shadow(color: Colors.black54, offset: Offset(1, 1), blurRadius: 8)])),
           ),
+          // CouchDash: _appsPerRow full cards across the width, wrapping onto more rows instead of scrolling sideways
           applications.isNotEmpty
-              ? SizedBox(
-                  height: category.rowHeight.toDouble(),
-                  child: ListView.custom(
+              ? LayoutBuilder(builder: (context, constraints) {
+                  final width = (constraints.maxWidth - 16 - 16 * (_appsPerRow - 1)) / _appsPerRow;
+                  return Padding(
                     padding: EdgeInsets.all(8),
-                    scrollDirection: Axis.horizontal,
-                    childrenDelegate: SliverChildBuilderDelegate(
-                      (context, index) => EnsureVisible(
-                        key: Key("${category.id}-${applications[index].packageName}"),
-                        alignment: 0.1,
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: AppCard(
-                            category: category,
-                            application: applications[index],
-                            autofocus: index == 0,
-                            onMove: (direction) => _onMove(context, direction, index),
-                            onMoveEnd: () => _onMoveEnd(context),
+                    child: Wrap(spacing: 16, runSpacing: 16, children: [
+                      for (var index = 0; index < applications.length; index++)
+                        EnsureVisible(
+                          key: Key("${category.id}-${applications[index].packageName}"),
+                          alignment: 0.1,
+                          child: SizedBox(
+                            width: width,
+                            child: AppCard(
+                              category: category,
+                              application: applications[index],
+                              autofocus: index == 0,
+                              onMove: (direction) => _onMove(context, direction, index),
+                              onMoveEnd: () => _onMoveEnd(context),
+                            ),
                           ),
                         ),
-                      ),
-                      childCount: applications.length,
-                      findChildIndexCallback: _findChildIndex,
-                    ),
-                  ),
-                )
+                    ]),
+                  );
+                })
               : _emptyState(context),
         ],
       );
-
-  int _findChildIndex(Key key) =>
-      applications.indexWhere((app) => "${category.id}-${app.packageName}" == (key as ValueKey<String>).value);
 
   Widget _emptyState(BuildContext context) => SizedBox(
         height: 110,
@@ -131,7 +129,16 @@ class CategoryRow extends StatelessWidget {
           newIndex = index - 1;
         }
         break;
-      default:
+      // the row wraps (_appsPerRow across), so moving an app can also go a row up or down
+      case AxisDirection.up:
+        if (index >= _appsPerRow) {
+          newIndex = index - _appsPerRow;
+        }
+        break;
+      case AxisDirection.down:
+        if (index + _appsPerRow < applications.length) {
+          newIndex = index + _appsPerRow;
+        }
         break;
     }
     if (newIndex != null) {

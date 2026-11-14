@@ -95,12 +95,21 @@ a bigger machine for faster builds.
 
 ## 4. Link it to Home Assistant
 
-### 4a. HA user and token
-1. In HA, create a **non-admin** user for the TV (Settings → People → Users → Add user), e.g. "TV Launcher".
-   Allowing local login only is fine.
-2. Log in as that user (or ask an admin), go to Profile → Security → **Long-lived access tokens**, and create a token.
+### 4a. HA user and login
+In HA, create a **non-admin** user for the TV (Settings → People → Users → Add user), e.g. "TV Launcher".
+Allowing local login only is fine.
 
-### 4b. Config file on the TV
+**Easiest: log in from your phone.** On the TV open Settings (gear, top right) → **Home Assistant**. The TV shows a QR code
+for a small setup page it serves on your network (port 8099). Scan it, enter the HA address (`homeassistant.local`
+works; `http://` and port 8123 are filled in), and log in as the TV user on HA's normal login page. The TV keeps HA's
+refresh token, so there is nothing to renew. The page also takes a pasted long-lived token instead.
+Your phone must be able to reach the TV on port 8099 (mind firewalls between VLANs).
+
+Settings → Home Assistant then shows the connection, notifications, the device name, remote shortcuts and
+"Connect again".
+
+### 4b. Alternative: config file over adb
+Create a long-lived token as the TV user (Profile → Security → **Long-lived access tokens**), then
 Create `ha.json`:
 ```json
 { "url": "http://<ha-host>:8123", "token": "<long-lived token>", "dashboard": "tv-launcher" }
@@ -123,8 +132,8 @@ sections view. Stacks and grids are flattened.
 |---|---|
 | `glance` titled **Outdoors** | top bar: `weather.*` (condition, icon, temp) and any AQI sensor as a coloured badge |
 | `glance` titled **Indoors** | top bar after `Indoors:`: sensors in order (temp, humidity, AQI) |
-| `glance` with any other / no title | status pills (`Name: **State**`, icon, green/amber) |
-| `tile` | a tile. `tap_action` → OK, `hold_action` → hold OK. Default `more-info` = TV popup |
+| `glance` with any other / no title | status pills (`Name: **State**`, icon, green/amber); an entity with `name: ""` shows its state only, so one text sensor can make a combined pill |
+| `tile` | a tile, 5 per row (more wrap onto new rows). `tap_action` → OK, `hold_action` → hold OK. Default `more-info` = TV popup; tiles whose popup has buttons or controls show a `⋯` badge |
 | `button` cards **after a tile in the same vertical-stack** | that tile's popup menu (name + `tap_action`); the last-activated scene is ticked |
 | stand-alone `button` | its own tile |
 | `picture-entity` with a `camera.*` | snapshot tile, refreshed every 10 s |
@@ -132,7 +141,8 @@ sections view. Stacks and grids are flattened.
 
 - **Supported actions:** `toggle`, `perform-action` (or legacy `call-service`), `more-info`, `none`.
 - **Visibility:** `visibility` conditions `time` (after/before/weekdays, may wrap midnight), `state` (state/state_not), `and`/`or` are evaluated on the TV and re-checked every minute.
-- **Icons:** common `mdi:` icons are mapped; others fall back to an icon per entity type.
+- **Icons:** common `mdi:` icons are mapped (the card's `icon:`, for pills also the entity's own icon); others fall back to an icon per entity type.
+- **On the TV:** the first app category also shows 5 apps per row and wraps; Left/Right at the end of a row continue on the next row (HA tiles and apps each within their own group).
 
 Minimal example:
 ```yaml
@@ -171,9 +181,12 @@ to the wallpaper picked on the TV.
 ## 4e. Optional: HA notifications over any app
 
 The launcher can register as an HA **mobile_app device** (the same API the Companion app uses). HA then gets `notify.mobile_app_<device_name>`, and its messages are drawn on top of whatever is playing.
-1. Allow drawing over other apps (Android TV has no settings screen for it):
-   `adb shell appops set app.couchdash.launcher SYSTEM_ALERT_WINDOW allow`
-2. In `ha.json` add `"notifications": true` (optional: `"device_name": "Living Room TV"`, `"offline_max_age_minutes": 10`). Push it again, then restart the app (`am force-stop`, open it). On first start it registers; the device appears in HA under Mobile App.
+1. Settings → Home Assistant → **Notifications** on. If the TV doesn't let CouchDash draw over other apps yet, it opens
+   Android's "Display over other apps" list: allow CouchDash. (Over adb instead:
+   `adb shell appops set app.couchdash.launcher SYSTEM_ALERT_WINDOW allow` and `"notifications": true` in `ha.json`.)
+   The **Device name** there is the TV's name in HA (default "Living Room TV"); renaming updates the HA device.
+   On first start it registers; the device appears in HA under Mobile App. Optional in `ha.json`:
+   `"offline_max_age_minutes": 10`.
 3. Send from HA:
 ```yaml
 action: notify.mobile_app_living_room_tv
@@ -193,6 +206,24 @@ Buttons fire `mobile_app_notification_action` (with `action`, `tag`), like phone
 
 Local test without HA: `tools/notify-test.sh <tv-ip:5555> grant|card|actions|critical|chip|tts|clear`.
 
+## 4f. Optional: remote shortcuts (hold Menu)
+
+Holding the remote's Menu (≡) button for half a second can run a Home Assistant action, also while another app is
+in front: Settings → Home Assistant → **Hold Menu**:
+- **Nothing** (default),
+- **a script or scene** (any the TV's HA user can see), or
+- **Send event to Home Assistant**: fires `couchdash_button` (`button: menu`, `press: long`, `device_name`) for your
+  own automations.
+
+To work in every app, CouchDash needs an accessibility service: Settings → Device Preferences → Accessibility →
+**CouchDash remote buttons** → on (the HA page links there, or shows that path on TVs without a direct link). It only
+looks at the Menu key and never blocks it: the app in front still gets Menu. Without it, the shortcut works on the
+CouchDash home screen only.
+
+Android 11 stops the service after CouchDash is **updated or force-stopped** and doesn't restart it until it's turned
+**off and on again**; the HA page says so when that happens. Automations that force-stop the foreground app (e.g. to
+stop Prime Video waking the TV) should skip `app.couchdash.launcher`.
+
 ## 5. Make it the home screen
 
 The test builds can be opened from any launcher. To make CouchDash the home app:
@@ -201,7 +232,7 @@ adb shell cmd package set-home-activity app.couchdash.launcher/me.efesser.flaunc
 ```
 On Google TV / Android TV with the stock launcher you may also need to disable it:
 `adb shell pm disable-user --user 0 com.google.android.tvlauncher`. That is reversible with `pm enable`.
-If a button-remapping app such as "Home Button" or "Button Mapper" owns the Home key, set its Home action to CouchDash.
+If a button-remapping app such as Launcher Manager (flar2) or Button Mapper owns the Home key, set its Home action to CouchDash.
 
 To go back: `cmd package set-home-activity <other.launcher/.Activity>` (and re-enable the stock launcher).
 

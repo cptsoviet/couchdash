@@ -58,23 +58,9 @@ class FLauncher extends StatelessWidget {
         ),
       );
 
-  // kronie-ha fork: AT4K-style layout - no category titles, first category sits in a rounded "dock"
+  // kronie-ha fork: AT4K-style layout - no category titles (CouchDash: no "dock" frame either, so rows line up)
   Widget _categories(List<CategoryWithApps> categoriesWithApps) => Column(
-        children: [
-          for (var i = 0; i < categoriesWithApps.length; i++)
-            i == 0 ? _dock(_category(categoriesWithApps[i])) : _category(categoriesWithApps[i]),
-        ],
-      );
-
-  Widget _dock(Widget child) => Container(
-        margin: EdgeInsets.symmetric(vertical: 8),
-        padding: EdgeInsets.symmetric(vertical: 4),
-        decoration: BoxDecoration(
-          color: Color(0x14FFFFFF),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Color(0x14FFFFFF)),
-        ),
-        child: child,
+        children: [for (final c in categoriesWithApps) _category(c)],
       );
 
   Widget _category(CategoryWithApps categoryWithApps) {

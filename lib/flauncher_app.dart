@@ -98,6 +98,13 @@ class FLauncherApp extends StatelessWidget {
             dialogBackgroundColor: _swatch[400],
             scaffoldBackgroundColor: _swatch[400],
             textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: Colors.white)),
+            // CouchDash: visible remote-focus highlight on list tiles (settings toggles), matching the buttons
+            // same as a focused TextButton (Material 2: 12% of the white foreground), rounded and compact like one
+            focusColor: Colors.white.withValues(alpha: 0.12),
+            listTileTheme: ListTileThemeData(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              visualDensity: VisualDensity.compact,
+            ),
             appBarTheme: AppBarTheme(elevation: 0, backgroundColor: Colors.transparent),
             typography: Typography.material2018(),
             inputDecorationTheme: InputDecorationTheme(

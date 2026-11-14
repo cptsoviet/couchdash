@@ -84,6 +84,19 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Home Assistant notification overlay" />
         </service>
+        <!-- CouchDash: remote-button shortcuts in every app (switched on by the user in accessibility settings) -->
+        <service
+            android:name=".HaButtonService"
+            android:exported="true"
+            android:label="@string/button_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/couchdash_buttons" />
+        </service>
         <receiver android:name=".HaBootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

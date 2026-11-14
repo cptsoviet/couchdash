@@ -56,6 +56,12 @@ class MainActivity : FlutterActivity() {
                 "openAppInfo" -> result.success(openAppInfo(call.arguments as String))
                 "uninstallApp" -> result.success(uninstallApp(call.arguments as String))
                 "canDrawOverlays" -> result.success(Settings.canDrawOverlays(this))
+                "buttonServiceState" -> result.success(HaShortcuts.buttonServiceState(this))
+                "openAccessibilitySettings" -> result.success(openAccessibilitySettings())
+                "runShortcut" -> {
+                    HaShortcuts.run(this, call.argument<String>("key")!!, call.argument<String>("button")!!, call.argument<String>("press")!!)
+                    result.success(null)
+                }
                 "openOverlaySettings" -> result.success(openOverlaySettings())
                 "restartHaNotify" -> {
                     stopService(Intent(this, HaNotifyService::class.java))
@@ -186,6 +192,21 @@ class MainActivity : FlutterActivity() {
             }
         }
         return false
+    }
+
+    // CouchDash: where the user switches on HaButtonService (false: no such screen, the app shows the menu path).
+    // Android TV builds like the Shield's resolve this intent to a framework stub that only toasts "You don't have an
+    // app that can do this", so that counts as no screen.
+    private fun openAccessibilitySettings(): Boolean {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        val target = packageManager.resolveActivity(intent, 0)?.activityInfo?.packageName
+        if (target == null || target.endsWith(".frameworkpackagestubs")) return false
+        return try {
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun openAppInfo(packageName: String) = try {

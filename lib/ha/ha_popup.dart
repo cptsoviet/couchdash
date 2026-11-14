@@ -35,6 +35,18 @@ void showHaPopup(BuildContext context, Map<String, dynamic> card) {
   ).whenComplete(() => HardwareKeyboard.instance.removeHandler(watcher));
 }
 
+/// true when the tile opens a popup (tap or hold resolves to more-info, the default) that has something in it:
+/// stacked option buttons or controls for its domain. Drives the tile's "has a menu" badge.
+bool haTileHasPopup(BuildContext context, HaService ha, Map<String, dynamic> card) {
+  String kind(String key) => "${(card[key] as Map?)?["action"] ?? "more-info"}";
+  if (kind("tap_action") != "more-info" && kind("hold_action") != "more-info") return false;
+  if (((card["_options"] as List?) ?? []).isNotEmpty) return true;
+  final entityId = card["entity"] as String;
+  return _HaPopup(card, () => false)
+      ._controls(context, ha, entityId.split(".").first, entityId, ha.states[entityId])
+      .isNotEmpty;
+}
+
 class _HaPopup extends StatelessWidget {
   final Map<String, dynamic> card;
   final bool Function() isArmed;

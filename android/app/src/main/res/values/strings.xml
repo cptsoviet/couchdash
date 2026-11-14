@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CouchDash: shown in Android's accessibility settings for HaButtonService -->
+    <string name="button_service_label">CouchDash remote buttons</string>
+    <string name="button_service_description">Lets CouchDash see the remote\'s Menu button in every app, so holding it can run your Home Assistant shortcut. Short presses still go to the app in front. CouchDash doesn\'t read the screen.</string>
+</resources>

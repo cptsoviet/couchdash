@@ -7,9 +7,7 @@
  *
  * Config: the same ha.json the launcher uses (getExternalFilesDir/ha.json). Notifications are OFF unless it has
  * "notifications": true; optional "device_name" (default "Living Room TV"), "offline_max_age_minutes" (default 10).
- * Registration is cached in filesDir/ha_registration.json (delete it to re-register).
- * Credentials: "token" (long-lived), or "client_id" + "refresh_token" from the QR setup flow; the 30-minute access
- * token is then refreshed here in memory every 20 minutes (the Flutter side refreshes its own; nothing is written back).
+ * Config, login and the mobile_app registration live in HaLink (shared with the remote-button service).
  */
 package me.efesser.flauncher
 
@@ -34,7 +32,6 @@ import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
-import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -49,7 +46,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "HaNotify"
-private const val REFRESH_MS = 20 * 60_000L
+private const val REFRESH_MS = 10 * 60_000L
 private const val CHANNEL_ID = "ha_notify_service"
 
 class HaNotifyService : Service() {
@@ -66,10 +63,8 @@ class HaNotifyService : Service() {
     private val http = OkHttpClient.Builder().pingInterval(30, TimeUnit.SECONDS).build()
     private val json = "application/json".toMediaType()
 
-    private var baseUrl: String? = null
-    @Volatile private var token: String? = null
-    private var clientId: String? = null
-    private var refreshToken: String? = null
+    @Volatile private var link: HaLink? = null
+    private val baseUrl get() = link?.baseUrl
     private var webhookId: String? = null
     private var maxAgeMs = 10 * 60_000L
     private var socket: WebSocket? = null
@@ -91,6 +86,13 @@ class HaNotifyService : Service() {
         }
     }
 
+    // screensaver ended / screen back on: give stranded cards with buttons the remote's focus again
+    private val wake = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            main.postDelayed({ overlay.regainFocus() }, 600) // let the dream window go away first
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -102,6 +104,7 @@ class HaNotifyService : Service() {
             if (ttsReady) tts?.language = Locale.US
         }
         registerReceiver(screenOn, IntentFilter(Intent.ACTION_SCREEN_ON))
+        registerReceiver(wake, IntentFilter(Intent.ACTION_DREAMING_STOPPED).apply { addAction(Intent.ACTION_SCREEN_ON) })
         Thread { setUp() }.start()
     }
 
@@ -117,6 +120,7 @@ class HaNotifyService : Service() {
         main.removeCallbacksAndMessages(null)
         socket?.close(1000, null)
         unregisterReceiver(screenOn)
+        unregisterReceiver(wake)
         tts?.shutdown()
         overlay.clearAll()
         super.onDestroy()
@@ -137,103 +141,31 @@ class HaNotifyService : Service() {
 
     // ---------- setup: config, registration ----------
     private fun setUp() {
-        val config = runCatching { JSONObject(File(getExternalFilesDir(null), "ha.json").readText()) }.getOrNull()
+        val config = HaLink.readConfig(this)
         if (config == null || !config.optBoolean("notifications", false)) {
             Log.i(TAG, "notifications disabled (no ha.json or \"notifications\": true missing)")
             return
         }
-        baseUrl = config.getString("url").trimEnd('/')
-        refreshToken = config.optString("refresh_token").ifEmpty { null }
-        clientId = config.optString("client_id").ifEmpty { null }
-        if (refreshToken != null && clientId != null) {
-            if (!refreshAccessToken()) {
-                main.postDelayed({ Thread { setUp() }.start() }, 60_000)
-                return
-            }
-            main.postDelayed(refreshLoop, REFRESH_MS)
-        } else {
-            token = config.getString("token")
-        }
+        val l = HaLink.load(this, http) ?: return
+        link = l
         maxAgeMs = config.optLong("offline_max_age_minutes", 10) * 60_000L
-        val regFile = File(filesDir, "ha_registration.json")
-        val deviceName = config.optString("device_name").ifBlank { "Living Room TV" }
-        val registration = runCatching { JSONObject(regFile.readText()) }.getOrNull()
-        webhookId = registration?.optString("webhook_id")?.ifEmpty { null }
+        webhookId = if (l.token() != null) l.webhookId() else null
         if (webhookId == null) {
-            webhookId = register(deviceName)?.also {
-                regFile.writeText(JSONObject().put("webhook_id", it).put("device_name", deviceName).toString())
-            }
-        } else if (registration?.optString("device_name") != deviceName && updateDeviceName(deviceName)) {
-            regFile.writeText(JSONObject().put("webhook_id", webhookId).put("device_name", deviceName).toString())
-        }
-        if (webhookId == null) {
-            Log.w(TAG, "registration failed; retrying in 60 s")
+            Log.w(TAG, "login or registration failed; retrying in 60 s")
             main.postDelayed({ Thread { setUp() }.start() }, 60_000)
             return
         }
+        main.postDelayed(refreshLoop, REFRESH_MS)
         main.post { connect() }
     }
 
+    // keeps the OAuth access token fresh for overlay images (no-op for long-lived tokens)
     private val refreshLoop: Runnable = object : Runnable {
         override fun run() {
             if (stopped) return
-            Thread { refreshAccessToken() }.start() // on failure the old token still works until it expires; retry next round
+            Thread { link?.token() }.start() // on failure the old token still works until it expires; retry next round
             main.postDelayed(this, REFRESH_MS)
         }
-    }
-
-    /** OAuth refresh_token grant; HA access tokens last 30 minutes. */
-    private fun refreshAccessToken(): Boolean = runCatching {
-        val form = FormBody.Builder()
-            .add("grant_type", "refresh_token")
-            .add("refresh_token", refreshToken!!)
-            .add("client_id", clientId!!)
-            .build()
-        http.newCall(Request.Builder().url("$baseUrl/auth/token").post(form).build()).execute().use { r ->
-            if (!r.isSuccessful) error("HTTP ${r.code}${if (r.code == 400) " (login revoked? set up again)" else ""}")
-            token = JSONObject(r.body!!.string()).getString("access_token")
-        }
-        true
-    }.onFailure { Log.w(TAG, "token refresh: $it") }.getOrDefault(false)
-
-    /** Renamed on the TV: update the existing HA device instead of registering a second one. */
-    private fun updateDeviceName(deviceName: String): Boolean = runCatching {
-        val data = JSONObject()
-            .put("device_name", deviceName)
-            .put("app_version", packageManager.getPackageInfo(packageName, 0).versionName ?: "1")
-            .put("manufacturer", Build.MANUFACTURER)
-            .put("model", Build.MODEL)
-            .put("os_version", Build.VERSION.RELEASE)
-        val body = JSONObject().put("type", "update_registration").put("data", data)
-        http.newCall(Request.Builder().url("$baseUrl/api/webhook/$webhookId").post(body.toString().toRequestBody(json)).build())
-            .execute().use { r -> if (!r.isSuccessful) error("HTTP ${r.code}") }
-        true
-    }.onFailure { Log.w(TAG, "update_registration: $it") }.getOrDefault(false)
-
-    private fun register(deviceName: String): String? {
-        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()
-        val body = JSONObject()
-            .put("device_id", "couchdash-$deviceId")
-            .put("app_id", "app.couchdash.launcher")
-            .put("app_name", "CouchDash")
-            .put("app_version", packageManager.getPackageInfo(packageName, 0).versionName ?: "1")
-            .put("device_name", deviceName)
-            .put("manufacturer", Build.MANUFACTURER)
-            .put("model", Build.MODEL)
-            .put("os_name", "Android")
-            .put("os_version", Build.VERSION.RELEASE)
-            .put("supports_encryption", false)
-            .put("app_data", JSONObject().put("push_websocket_channel", true))
-        return runCatching {
-            http.newCall(
-                Request.Builder().url("$baseUrl/api/mobile_app/registrations")
-                    .header("Authorization", "Bearer $token")
-                    .post(body.toString().toRequestBody(json)).build()
-            ).execute().use { r ->
-                if (!r.isSuccessful) error("HTTP ${r.code}")
-                JSONObject(r.body!!.string()).getString("webhook_id")
-            }
-        }.onFailure { Log.w(TAG, "register: $it") }.getOrNull()
     }
 
     // ---------- WebSocket push channel ----------
@@ -244,7 +176,7 @@ class HaNotifyService : Service() {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val m = JSONObject(text)
                 when (m.optString("type")) {
-                    "auth_required" -> webSocket.send(JSONObject().put("type", "auth").put("access_token", token).toString())
+                    "auth_required" -> webSocket.send(JSONObject().put("type", "auth").put("access_token", link?.token()).toString())
                     "auth_ok" -> {
                         backoffMs = 2_000L
                         webSocket.send(JSONObject().put("id", nextId++).put("type", "mobile_app/push_notification_channel")
@@ -290,7 +222,7 @@ class HaNotifyService : Service() {
 
     private fun show(n: JSONObject) {
         val data = n.optJSONObject("data") ?: JSONObject()
-        overlay.show(n, baseUrl, token)
+        overlay.show(n, baseUrl, link?.cachedToken)
         val text = data.optString("tts_text").ifEmpty {
             if (data.optBoolean("tts", false)) listOf(n.optString("title"), n.optString("message")).filter { it.isNotBlank() }.joinToString(". ") else ""
         }
