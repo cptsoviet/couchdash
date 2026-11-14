@@ -3,7 +3,11 @@
  * stored in ha.json:
  *   "shortcuts": {"menu_long": {"type": "script", "entity_id": "script.goodnight", "name": "Goodnight"}}
  *   type "script" / "scene": <domain>.turn_on for entity_id;  type "event": fires couchdash_button through the
- *   mobile_app webhook ({button, press, device_name}), so HA automations decide. No entry = the button does nothing.
+ *   mobile_app webhook ({button, press, device_name}), so HA automations decide;  type "ask": voice question to HA's
+ *   conversation agent (HaAsk). No entry = the button does nothing.
+ * Keys: "menu_long" (hold Menu), "menu_double" (press Menu twice), "netflix_short" / "netflix_long" (Netflix button).
+ * "remote_buttons" in ha.json (written by the launcher from the dashboard's "Remote buttons" cards) wins over
+ * "shortcuts" (the TV-side settings); it adds type "service" (domain, service, data) and "ask" may carry pipeline_id.
  * Run from the accessibility service (any app in front) or from the launcher itself when that service is off.
  */
 package me.efesser.flauncher
@@ -26,13 +30,22 @@ object HaShortcuts {
     private val http by lazy { OkHttpClient.Builder().callTimeout(15, TimeUnit.SECONDS).build() }
 
     /** The configured action for [key] (e.g. "menu_long"), or null when the button is unassigned. */
-    fun shortcut(context: Context, key: String): JSONObject? =
-        HaLink.readConfig(context)?.optJSONObject("shortcuts")?.optJSONObject(key)?.takeIf { it.optString("type").isNotEmpty() }
+    fun shortcut(context: Context, key: String): JSONObject? {
+        val config = HaLink.readConfig(context) ?: return null
+        val source = config.optJSONObject("remote_buttons") ?: config.optJSONObject("shortcuts")
+        return source?.optJSONObject(key)?.takeIf { it.optString("type").isNotEmpty() }
+    }
 
     /** Runs the shortcut on a background thread and shows a short toast with the outcome. */
     fun run(context: Context, key: String, button: String, press: String) {
         val app = context.applicationContext
         val shortcut = shortcut(app, key) ?: return
+        if (shortcut.optString("type") == "ask") {
+            // the original context: from the accessibility service the card can be an accessibility overlay
+            val pipeline = shortcut.optString("pipeline_id").ifEmpty { null }
+            Handler(Looper.getMainLooper()).post { HaAsk.start(context, pipeline) }
+            return
+        }
         Thread {
             val link = HaLink.load(app, http)
             val type = shortcut.optString("type")
@@ -42,6 +55,12 @@ object HaShortcuts {
                 type == "script" || type == "scene" -> {
                     val entity = shortcut.optString("entity_id")
                     entity.isNotEmpty() && link.postAuthorized("/api/services/$type/turn_on", JSONObject().put("entity_id", entity))
+                }
+                type == "service" -> {
+                    val domain = shortcut.optString("domain")
+                    val service = shortcut.optString("service")
+                    domain.isNotEmpty() && service.isNotEmpty() &&
+                        link.postAuthorized("/api/services/$domain/$service", shortcut.optJSONObject("data") ?: JSONObject())
                 }
                 type == "event" -> link.webhookId()?.let { id ->
                     val data = JSONObject().put("button", button).put("press", press).put("device_name", link.deviceName)

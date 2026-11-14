@@ -50,6 +50,11 @@ class FLauncherChannel {
   /// "on", "off", or "stuck" (switched on but not running until it's turned off and on, e.g. after an app update)
   Future<String> buttonServiceState() async => await _methodChannel.invokeMethod('buttonServiceState');
 
+  /// CouchDash: the microphone permission "Ask Home Assistant" needs
+  Future<bool> micAllowed() async => await _methodChannel.invokeMethod('micAllowed');
+
+  Future<void> requestMic() async => await _methodChannel.invokeMethod('requestMic');
+
   /// false when this TV has no accessibility settings screen
   Future<bool> openAccessibilitySettings() async => await _methodChannel.invokeMethod('openAccessibilitySettings');
 

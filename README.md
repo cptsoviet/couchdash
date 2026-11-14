@@ -206,14 +206,47 @@ Buttons fire `mobile_app_notification_action` (with `action`, `tag`), like phone
 
 Local test without HA: `tools/notify-test.sh <tv-ip:5555> grant|card|actions|critical|chip|tts|clear`.
 
-## 4f. Optional: remote shortcuts (hold Menu)
+## 4f. Optional: remote shortcuts (hold / double-press Menu)
 
-Holding the remote's Menu (≡) button for half a second can run a Home Assistant action, also while another app is
-in front: Settings → Home Assistant → **Hold Menu**:
+Holding the remote's Menu (≡) button for half a second, or pressing it twice quickly, can run a Home Assistant
+action, also while another app is in front: Settings → Home Assistant → **Hold Menu** / **Press Menu twice**:
 - **Nothing** (default),
+- **Ask Home Assistant (voice)**: a card at the bottom shows what you say (Android's speech recognition, on the Shield
+  Google's, using the remote's mic), runs it through an HA **Assist pipeline** (intent → TTS), and shows the answer
+  and plays it in the pipeline's own voice. Which pipeline: the state of the helper
+  `input_select.couchdash_assist_pipeline` (options = pipeline names as in Settings → Voice assistants, plus
+  `preferred`); missing or unknown = HA's preferred pipeline, so you swap pipelines in HA. Asking again within
+  5 minutes continues the conversation. Needs the microphone permission (the HA page has an **Allow microphone**
+  button),
 - **a script or scene** (any the TV's HA user can see), or
-- **Send event to Home Assistant**: fires `couchdash_button` (`button: menu`, `press: long`, `device_name`) for your
-  own automations.
+- **Send event to Home Assistant**: fires `couchdash_button` (`button: menu`, `press: long` or `double`,
+  `device_name`) for your own automations.
+
+**Assigning buttons in Home Assistant instead (recommended):** add a vertical-stack with `title: Remote buttons`
+(or a section starting with a heading "Remote buttons") to the dashboard's first view, holding `button` cards named
+after triggers: `Netflix`, `Netflix hold`, `Menu hold`, `Menu double`. Each card's `tap_action` is what the button
+does: `toggle` (the card's entity), `perform-action`, or `assist` (with the editor's pipeline picker, so the pipeline
+is chosen there), or `none`. The TV doesn't show these cards, picks up changes live, and then shows the assignments
+read-only in its settings (they replace the TV-side choices above).
+
+```yaml
+- type: vertical-stack
+  title: Remote buttons
+  cards:
+    - type: button
+      name: Netflix
+      entity: light.living_room
+      tap_action: {action: toggle}
+    - type: button
+      name: Netflix hold
+      tap_action: {action: assist, pipeline_id: preferred}
+```
+
+The **Netflix button** (Shield remote, `KEYCODE_BUTTON_12`) is taken over once it has an assignment: short and long
+press are clean. The Shield itself still opens Netflix (or its Play Store page) on that button, before any app sees the
+key, so CouchDash presses Back when one of them comes up within 3 s of the press; for that the service also watches
+window changes of those two apps (nothing else). Remove any Button Mapper mapping for it. Menu presses still reach the
+app in front. A short toast confirms each action ("Toggle Living room lights ✓", or the script's name).
 
 To work in every app, CouchDash needs an accessibility service: Settings → Device Preferences → Accessibility →
 **CouchDash remote buttons** → on (the HA page links there, or shows that path on TVs without a direct link). It only

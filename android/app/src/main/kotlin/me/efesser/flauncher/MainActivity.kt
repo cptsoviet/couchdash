@@ -58,6 +58,11 @@ class MainActivity : FlutterActivity() {
                 "canDrawOverlays" -> result.success(Settings.canDrawOverlays(this))
                 "buttonServiceState" -> result.success(HaShortcuts.buttonServiceState(this))
                 "openAccessibilitySettings" -> result.success(openAccessibilitySettings())
+                "micAllowed" -> result.success(HaAsk.micAllowed(this))
+                "requestMic" -> {
+                    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 7301)
+                    result.success(null)
+                }
                 "runShortcut" -> {
                     HaShortcuts.run(this, call.argument<String>("key")!!, call.argument<String>("button")!!, call.argument<String>("press")!!)
                     result.success(null)

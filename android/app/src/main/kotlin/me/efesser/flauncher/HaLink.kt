@@ -85,6 +85,28 @@ class HaLink private constructor(private val context: Context, val config: JSONO
         true
     }.onFailure { Log.w(TAG, "POST $path: $it") }.getOrDefault(false)
 
+    /** HA paths like /api/tts_proxy/... -> full URL; full URLs pass through. */
+    fun absolute(url: String) = if (url.startsWith("http://") || url.startsWith("https://")) url else baseUrl + url
+
+    /** GET with the access token, returning the JSON reply; null on any failure (e.g. 404 for a missing entity). */
+    fun getJson(path: String): JSONObject? = runCatching {
+        val t = token() ?: error("no token")
+        http.newCall(Request.Builder().url("$baseUrl$path").header("Authorization", "Bearer $t").build()).execute().use { r ->
+            if (!r.isSuccessful) error("HTTP ${r.code}")
+            JSONObject(r.body!!.string())
+        }
+    }.onFailure { Log.i(TAG, "GET $path: $it") }.getOrNull()
+
+    /** POST with the access token, returning the JSON reply; null on any failure. */
+    fun postForJson(path: String, body: JSONObject): JSONObject? = runCatching {
+        val t = token() ?: error("no token")
+        http.newCall(Request.Builder().url("$baseUrl$path").header("Authorization", "Bearer $t")
+            .post(body.toString().toRequestBody(json)).build()).execute().use { r ->
+            if (!r.isSuccessful) error("HTTP ${r.code}")
+            JSONObject(r.body!!.string())
+        }
+    }.onFailure { Log.w(TAG, "POST $path: $it") }.getOrNull()
+
     /** POST to the mobile_app webhook (no auth header: the webhook id is the secret). */
     fun postWebhook(webhookId: String, body: JSONObject): Boolean = runCatching {
         http.newCall(Request.Builder().url("$baseUrl/api/webhook/$webhookId").post(body.toString().toRequestBody(json)).build())

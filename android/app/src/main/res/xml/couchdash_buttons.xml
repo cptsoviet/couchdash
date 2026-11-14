@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- CouchDash: remote buttons in every app (HaButtonService); key events only, no window content -->
+<!-- CouchDash: remote buttons in every app (HaButtonService); key events, plus window changes of only Netflix and the
+     Play Store (the Shield opens Netflix itself on the Netflix button; HaButtonService closes it again). No window content. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeAnnouncement"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:packageNames="com.netflix.ninja,com.android.vending"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagRequestFilterKeyEvents"
     android:canRequestFilterKeyEvents="true"

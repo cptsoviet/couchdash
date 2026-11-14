@@ -143,6 +143,7 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
   bool? _canOverlay;
   bool _noOverlayScreen = false;
   bool _noAccessibilityScreen = false;
+  bool _micAllowed = true; // checked on load and on return from Android's permission prompt
 
   @override
   void initState() {
@@ -160,7 +161,10 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
   // back from Android's "Display over other apps" screen
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _checkOverlay();
+    if (state == AppLifecycleState.resumed) {
+      _checkOverlay();
+      _checkMic();
+    }
   }
 
   Future<void> _load() async {
@@ -172,6 +176,7 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
       _deviceName = name is String && name.trim().isNotEmpty ? name : defaultDeviceName;
     });
     await _checkOverlay();
+    await _checkMic();
   }
 
   Future<void> _checkOverlay() async {
@@ -221,11 +226,14 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
 
   static String _shortcutLabel(Map<String, dynamic>? shortcut) => switch (shortcut?["type"]) {
         "script" || "scene" => "${shortcut!["name"] ?? shortcut["entity_id"]}",
+        "service" => "${shortcut!["name"] ?? "${shortcut["domain"]}.${shortcut["service"]}"}",
         "event" => "Send event to Home Assistant",
+        "ask" => "Ask Home Assistant (voice)",
         _ => "Nothing",
       };
 
-  Future<void> _pickMenuLong() async {
+  // [key]: "menu_long" / "menu_double"; [press]: what the couchdash_button event reports
+  Future<void> _pickShortcut(String key, String title, String press) async {
     final ha = context.read<HaService>();
     // scripts and scenes this HA user can see, by name
     final runnable = ha.states.values
@@ -233,7 +241,7 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
         .map((s) => (id: "${s["entity_id"]}", name: "${s["attributes"]?["friendly_name"] ?? s["entity_id"]}"))
         .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    final current = ha.menuLongShortcut;
+    final current = key == "menu_double" ? ha.menuDoubleShortcut : ha.menuLongShortcut;
     // dialogContext: the popup's own navigator (the settings panel has a nested one; popping that closed the page)
     Widget option(BuildContext dialogContext, String label, Map<String, dynamic>? value, {String? subtitle}) {
       final selected = value?["type"] == current?["type"] && value?["entity_id"] == current?["entity_id"];
@@ -255,11 +263,13 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
     final picked = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: Text("Long-press Menu"),
+        title: Text(title),
         children: [
           option(context, "Nothing", null),
+          option(context, "Ask Home Assistant (voice)", {"type": "ask"},
+              subtitle: "speak a question or command; your Assist agent answers"),
           option(context, "Send event to Home Assistant", {"type": "event"},
-              subtitle: "couchdash_button (button: menu, press: long) for your automations"),
+              subtitle: "couchdash_button (button: menu, press: $press) for your automations"),
           for (final r in runnable)
             option(context, r.name, {"type": r.id.split(".").first, "entity_id": r.id, "name": r.name}, subtitle: r.id),
         ],
@@ -269,13 +279,29 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
     final config = await _store.read() ?? {};
     final shortcuts = Map<String, dynamic>.from(config["shortcuts"] as Map? ?? {});
     if (picked["value"] == null) {
-      shortcuts.remove("menu_long");
+      shortcuts.remove(key);
     } else {
-      shortcuts["menu_long"] = picked["value"];
+      shortcuts[key] = picked["value"];
     }
     await _store.update({"shortcuts": shortcuts.isEmpty ? null : shortcuts});
     ha.readShortcuts(await _store.read() ?? {});
+    if (picked["value"]?["type"] == "ask") await _checkMic();
   }
+
+  Future<void> _checkMic() async {
+    final allowed = await _channel.micAllowed().catchError((_) => false);
+    if (mounted) setState(() => _micAllowed = allowed);
+  }
+
+  Widget _shortcutRow(String label, Map<String, dynamic>? shortcut, VoidCallback onPressed, IconData icon) =>
+      TextButton(
+        onPressed: onPressed,
+        child: Row(children: [
+          Icon(icon),
+          Container(width: 8),
+          Expanded(child: Text("$label: ${_shortcutLabel(shortcut)}", style: Theme.of(context).textTheme.bodyMedium)),
+        ]),
+      );
 
   Future<void> _openAccessibilitySettings() async {
     final opened = await _channel.openAccessibilitySettings().catchError((_) => false);
@@ -338,18 +364,44 @@ class _HaSettingsViewState extends State<_HaSettingsView> with WidgetsBindingObs
               child: Text("Remote shortcuts",
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white60)),
             ),
-            TextButton(
-              onPressed: _pickMenuLong,
-              child: Row(children: [
-                Icon(Icons.menu),
-                Container(width: 8),
-                Expanded(
-                  child: Text("Hold Menu: ${_shortcutLabel(ha.menuLongShortcut)}",
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
-              ]),
-            ),
-            if (ha.menuLongShortcut != null && !ha.buttonServiceEnabled) ...[
+            if (ha.remoteButtons != null) ...[
+              // assigned in the dashboard ("Remote buttons" cards): shown here, changed in HA
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text("Set in Home Assistant: \"Remote buttons\" cards in the TV dashboard.", style: small),
+              ),
+              for (final e in const {
+                "netflix_short": "Netflix",
+                "netflix_long": "Hold Netflix",
+                "menu_long": "Hold Menu",
+                "menu_double": "Press Menu twice",
+              }.entries)
+                if (ha.remoteButtons![e.key] != null)
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Text("${e.value}: ${_shortcutLabel(Map<String, dynamic>.from(ha.remoteButtons![e.key]))}",
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ),
+            ] else ...[
+              _shortcutRow(
+                  "Hold Menu", ha.menuLongShortcut, () => _pickShortcut("menu_long", "Hold Menu", "long"), Icons.menu),
+              _shortcutRow("Press Menu twice", ha.menuDoubleShortcut,
+                  () => _pickShortcut("menu_double", "Press Menu twice", "double"), Icons.keyboard_double_arrow_right),
+            ],
+            if (!_micAllowed &&
+                [...?ha.remoteButtons?.values, ha.menuLongShortcut, ha.menuDoubleShortcut]
+                    .any((s) => s is Map && s["type"] == "ask")) ...[
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child:
+                    Text("Ask Home Assistant needs the microphone.", style: small?.copyWith(color: Colors.amberAccent)),
+              ),
+              TextButton(onPressed: () => _channel.requestMic().catchError((_) {}), child: Text("Allow microphone")),
+            ],
+            if (((ha.remoteButtons?.isNotEmpty ?? false) ||
+                    ha.menuLongShortcut != null ||
+                    ha.menuDoubleShortcut != null) &&
+                !ha.buttonServiceEnabled) ...[
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
