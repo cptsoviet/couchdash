@@ -1,5 +1,9 @@
 # CouchDash
 
+> [!WARNING]
+> **Early development.** CouchDash is not ready for production or public use. Things change and break without notice.
+> Use at your own risk.
+
 **CouchDash** (couchdash.app) is an Android TV launcher with a live **Home Assistant** panel above the app list. It is a fork of
 [FLauncher](https://gitlab.com/flauncher/flauncher) (GPL-3.0, © Étienne Fesser), restyled after AT4K: dark
 backgrounds, a clock pill top-right, and the first app row in a rounded dock.
@@ -132,7 +136,7 @@ sections view. Stacks and grids are flattened.
 |---|---|
 | `glance` titled **Outdoors** | top bar: `weather.*` (condition, icon, temp) and any AQI sensor as a coloured badge |
 | `glance` titled **Indoors** | top bar after `Indoors:`: sensors in order (temp, humidity, AQI) |
-| `glance` with any other / no title | status pills (`Name: **State**`, icon, green/amber); an entity with `name: ""` shows its state only, so one text sensor can make a combined pill |
+| `glance` with any other / no title | status pills (`Name: **State**`, icon, green/amber); an entity with `name: ""` shows its state only, so one text sensor can make a combined pill; an entity attribute `color` (`green`, `yellow`, `amber`, `orange`, `red`, `blue`, `purple`, `grey` or `#rrggbb`) gives the pill a solid background; the card's `show_icon: false` (or an entity's `icon: ""`) hides the icon |
 | `tile` | a tile, 5 per row (more wrap onto new rows). `tap_action` → OK, `hold_action` → hold OK. Default `more-info` = TV popup; tiles whose popup has buttons or controls show a `⋯` badge |
 | `button` cards **after a tile in the same vertical-stack** | that tile's popup menu (name + `tap_action`); the last-activated scene is ticked |
 | stand-alone `button` | its own tile |
@@ -200,7 +204,7 @@ data:
     duration: 20          # seconds, 0 = until dismissed (default 10, or 30 with buttons)
     priority: critical    # centred, dims the screen, repeats speech every 30 s until answered
     tag: doorbell         # same tag replaces; message "clear_notification" + tag removes it
-    chip: true            # small persistent pill instead of a card; with countdown_until: <ISO time>
+    chip: true            # small pill top left, shaped like the clock bar; stays until cleared or `duration` ends; countdown_until: <ISO time> shows a timer
 ```
 Buttons fire `mobile_app_notification_action` (with `action`, `tag`), like phone notifications. A card without buttons never takes the remote's focus. Messages that arrive while the TV is asleep are shown on wake if they are still younger than `offline_max_age_minutes`. The overlay is drawn by a native foreground service (`android/.../HaNotifyService.kt`, `HaOverlay.kt`), so it works while other apps are in front.
 
