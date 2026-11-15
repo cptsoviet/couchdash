@@ -33,6 +33,8 @@ class HaPanel extends StatelessWidget {
               if (_isHeaderCard(card)) break; // "Outdoors"/"Indoors" glance cards feed the top bar instead
               for (final e in (card["entities"] as List?) ?? []) {
                 final entry = e is String ? {"entity": e} : Map<String, dynamic>.from(e);
+                // HA's glance option: show_icon: false = pills without an icon (e.g. the text already has an emoji)
+                if (card["show_icon"] == false) entry["icon"] = "";
                 // weather goes next to the clock (HaWeatherInline), not into the pill row
                 if (!"${entry["entity"]}".startsWith("weather.")) pills.add(entry);
               }
@@ -147,6 +149,8 @@ bool _isActive(Map<String, dynamic>? state) {
 
 // the HA card's icon when it is one of these common mdi names, else the domain icon
 const _mdi = <String, IconData>{
+  "mdi:package-variant-closed": Icons.inventory_2_outlined,
+  "mdi:package-variant": Icons.inventory_2_outlined,
   "mdi:weather-night": Icons.nightlight_round,
   "mdi:sleep": Icons.bedtime_outlined,
   "mdi:bed": Icons.bed_outlined,
@@ -206,7 +210,16 @@ IconData _icon(String entityId, Map<String, dynamic>? state) {
     case "binary_sensor":
       return Icons.sensor_door_outlined;
     case "sensor":
-      return Icons.thermostat;
+      // by what the sensor measures; a thermometer only for temperatures (text sensors used to get one too)
+      return switch (state?["attributes"]?["device_class"]) {
+        "temperature" => Icons.thermostat,
+        "humidity" || "moisture" => Icons.water_drop_outlined,
+        "aqi" || "pm25" || "pm10" || "carbon_dioxide" || "volatile_organic_compounds" => Icons.air,
+        "power" || "energy" || "current" || "voltage" => Icons.bolt,
+        "battery" => Icons.battery_full,
+        "illuminance" => Icons.light_mode_outlined,
+        _ => Icons.info_outline,
+      };
     default:
       return Icons.circle_outlined;
   }
@@ -231,34 +244,64 @@ const _weather = <String, (String, IconData)>{
   "exceptional": ("Weather alert", Icons.warning_amber),
 };
 
+// CouchDash: a pill entity's `color` attribute (name or #rrggbb) = solid background, to make it stand out
+// (e.g. the packages pill: green new, yellow > 24 h, red > 30 h)
+const _pillColors = {
+  "green": Color(0xFF2E7D32),
+  "yellow": Color(0xFFF9A825),
+  "amber": Color(0xFFFFB300),
+  "orange": Color(0xFFEF6C00),
+  "red": Color(0xFFC62828),
+  "blue": Color(0xFF1565C0),
+  "purple": Color(0xFF6A1B9A),
+  "grey": Color(0xFF546E7A),
+};
+
+Color? _pillBackground(dynamic color) {
+  final c = "${color ?? ""}".trim().toLowerCase();
+  if (_pillColors.containsKey(c)) return _pillColors[c];
+  final hex = RegExp(r"^#?([0-9a-f]{6})$").firstMatch(c)?.group(1);
+  return hex == null ? null : Color(0xFF000000 | int.parse(hex, radix: 16));
+}
+
 class _Pill extends StatelessWidget {
   final String text;
   final String? value; // shown bold after "text: "
   final IconData? icon;
   final Color? iconColor;
+  final Color? background; // solid fill instead of the usual glass
 
-  _Pill({required this.text, this.value, this.icon, this.iconColor});
+  _Pill({required this.text, this.value, this.icon, this.iconColor, this.background});
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: Color(0x14FFFFFF),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Color(0x1FFFFFFF)),
+  Widget build(BuildContext context) {
+    // dark text on light fills (yellow), white on the rest
+    final fg = background == null
+        ? Colors.white.withValues(alpha: 0.92)
+        : (background!.computeLuminance() > 0.4 ? Colors.black87 : Colors.white);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: background ?? Color(0x14FFFFFF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: background ?? Color(0x1FFFFFFF)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (icon != null) ...[
+          Icon(icon, size: 15, color: background != null ? fg : (iconColor ?? Colors.white70)),
+          SizedBox(width: 6)
+        ],
+        Text.rich(
+          TextSpan(children: [
+            // name: "" in the dashboard = value only (e.g. one combined "🌡 80°  💧 47%" pill)
+            if (text.isNotEmpty) TextSpan(text: value == null ? text : "$text: "),
+            if (value != null) TextSpan(text: value, style: TextStyle(fontWeight: FontWeight.w700)),
+          ]),
+          style: TextStyle(fontSize: 13, color: fg),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (icon != null) ...[Icon(icon, size: 15, color: iconColor ?? Colors.white70), SizedBox(width: 6)],
-          Text.rich(
-            TextSpan(children: [
-              // name: "" in the dashboard = value only (e.g. one combined "🌡 80°  💧 47%" pill)
-              if (text.isNotEmpty) TextSpan(text: value == null ? text : "$text: "),
-              if (value != null) TextSpan(text: value, style: TextStyle(fontWeight: FontWeight.w700)),
-            ]),
-            style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.92)),
-          ),
-        ]),
-      );
+      ]),
+    );
+  }
 }
 
 class _EntityPill extends StatelessWidget {
@@ -294,7 +337,9 @@ class _EntityPill extends StatelessWidget {
     return _Pill(
       text: _name(entry, state),
       value: formatState(state),
-      icon: icon,
+      background: _pillBackground(state?["attributes"]?["color"]),
+      // icon: "" (or the card's show_icon: false) = no icon at all, not the fallback
+      icon: entry["icon"] == "" ? null : icon,
       iconColor: good
           ? Colors.greenAccent
           : bad

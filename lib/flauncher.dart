@@ -93,7 +93,8 @@ class FLauncher extends StatelessWidget {
           child: Align(
             alignment: Alignment.topRight,
             child: Container(
-              margin: EdgeInsets.only(top: 20, right: 40),
+              // right: the bar's own background ends on the right edge of the tiles and app rows (912 dp of 960)
+              margin: EdgeInsets.only(top: 20, right: 48),
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
               decoration: BoxDecoration(color: Color(0x66000000), borderRadius: BorderRadius.circular(28)),
               child: Row(

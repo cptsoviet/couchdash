@@ -308,10 +308,14 @@ class HaOverlay(private val context: Context, private val onAction: (String, JSO
     // ---------- chips ----------
     private fun showChip(tag: String, n: JSONObject, data: JSONObject) {
         val label = listOf(n.optString("title"), n.optString("message")).filter { it.isNotBlank() }
+        // shaped like the launcher's clock/weather bar on the other side of the top row (20 dp from the top, 44 dp
+        // tall, fully round, 40 % black); the text one step smaller than the clock
         val chip = TextView(context).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f); setTextColor(Color.WHITE)
-            setPadding(dp(14f), dp(7f), dp(14f), dp(7f))
-            background = panel(20f, Color.argb(205, 14, 16, 20), Color.argb(36, 255, 255, 255))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f); setTextColor(Color.WHITE)
+            setPadding(dp(20f), 0, dp(20f), 0)
+            minHeight = dp(44f)
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply { cornerRadius = dp(22f).toFloat(); setColor(Color.argb(102, 0, 0, 0)) }
         }
         val until = data.optString("countdown_until").takeIf { it.isNotEmpty() }
             ?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull() }
@@ -337,7 +341,8 @@ class HaOverlay(private val context: Context, private val onAction: (String, JSO
         }
         val root = chipRoot ?: LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }.also {
             chipRoot = it
-            wm.addView(it, params(false, false, Gravity.TOP or Gravity.START))
+            // x: the launcher's content edge (40 dp page margin + 8 dp row inset), so chips line up with its pills
+            wm.addView(it, params(false, false, Gravity.TOP or Gravity.START).apply { x = dp(48f); y = dp(20f) })
         }
         root.addView(chip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(10f) })
         chips.add(item)
