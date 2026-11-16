@@ -49,6 +49,8 @@ class FLauncher extends StatelessWidget {
                 child: Consumer<AppsService>(
                   builder: (context, appsService, _) => appsService.initialized
                       ? SingleChildScrollView(
+                          // CouchDash: room below the last row, so its focused card isn't on the screen edge
+                          padding: EdgeInsets.only(bottom: 32),
                           child: Column(children: [HaPanel(), _categories(appsService.categoriesWithApps)]))
                       : _emptyState(context),
                 ),

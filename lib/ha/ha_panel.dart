@@ -10,6 +10,7 @@
 import 'dart:async';
 
 import 'package:flauncher/custom_traversal_policy.dart';
+import 'package:flauncher/widgets/ensure_visible.dart';
 import 'package:flauncher/ha/ha_popup.dart';
 import 'package:flauncher/ha/ha_service.dart';
 import 'package:flutter/material.dart';
@@ -420,7 +421,7 @@ class _TileFrameState extends State<_TileFrame> {
         focusNode: _focusNode,
         onFocusChange: (f) {
           setState(() => _focused = f);
-          if (f) Scrollable.ensureVisible(context, alignment: 0.5, duration: Duration(milliseconds: 150));
+          if (f) ensureVisibleMinimally(context); // CouchDash: was Scrollable.ensureVisible(alignment: 0.5)
         },
         onKeyEvent: _onKey,
         child: AnimatedScale(

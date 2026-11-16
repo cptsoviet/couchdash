@@ -63,7 +63,7 @@ class AppsGrid extends StatelessWidget {
                   childrenDelegate: SliverChildBuilderDelegate(
                     (context, index) => EnsureVisible(
                       key: Key("${category.id}-${applications[index].packageName}"),
-                      alignment: 0.5,
+                      minimal: true,
                       child: AppCard(
                         category: category,
                         application: applications[index],

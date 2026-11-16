@@ -62,7 +62,7 @@ class CategoryRow extends StatelessWidget {
                       for (var index = 0; index < applications.length; index++)
                         EnsureVisible(
                           key: Key("${category.id}-${applications[index].packageName}"),
-                          alignment: 0.1,
+                          minimal: true,
                           child: SizedBox(
                             width: width,
                             child: AppCard(
