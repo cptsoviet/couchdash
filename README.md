@@ -4,6 +4,8 @@
 > **Early development.** CouchDash is not ready for production or public use. Things change and break without notice.
 > Use at your own risk.
 
+![CouchDash on an NVIDIA Shield: Home Assistant pills and tiles above the app rows](docs/screenshot.png)
+
 **CouchDash** (couchdash.app) is an Android TV launcher with a live **Home Assistant** panel above the app list. It is a fork of
 [FLauncher](https://gitlab.com/flauncher/flauncher) (GPL-3.0, © Étienne Fesser), restyled after AT4K: dark
 backgrounds, a clock pill top-right, and the first app row in a rounded dock.
@@ -131,6 +133,16 @@ Without the file there is simply no HA panel. Check that the TV can reach HA, in
 Create a dashboard in HA (Settings → Dashboards → Add, e.g. "TV Launcher" with URL `tv-launcher`, hidden from the
 sidebar, **not** admin-only). The launcher reads the **first view**: its `cards`, and/or all `sections` of a
 sections view. Stacks and grids are flattened.
+
+This is the dashboard behind the TV screen at the top: the "Outdoors" glance feeds the clock bar, the other glance
+cards become the pills, the tiles become tiles (buttons stacked under a tile become its popup, like "Living room
+lights" here), and the "Remote buttons" section isn't shown at all; it only assigns the remote's buttons (4f).
+
+![The tv-launcher dashboard in Home Assistant](docs/ha-dashboard.png)
+
+Holding OK on a tile (or pressing it, by default) opens its popup, here the AC's: target temperature and mode.
+
+![A tile popup on the TV: the AC's temperature and mode controls](docs/screenshot-popup.png)
 
 | Card | Shown on the TV as |
 |---|---|
