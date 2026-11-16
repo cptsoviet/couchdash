@@ -40,7 +40,15 @@ class FLauncherGradient {
 }
 
 mixin FLauncherGradients {
-  // kronie-ha fork: AT4K-style dark background, the default
+  // CouchDash: the launch screen's gradient (res/drawable/launch_background.xml), the default on a fresh install,
+  // so the splash fades into the same background
+  static final couchDash = FLauncherGradient(
+    "c0dc4da5-0000-4000-8000-c0dc4da50001",
+    "CouchDash",
+    LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF232B3A), Color(0xFF10141B)]),
+  );
+  // kronie-ha fork: AT4K-style dark background (the default before CouchDash had its own)
   static final at4kDark = FLauncherGradient(
     "4f2c1d9e-6a0b-4c55-9d1e-at4k00000001",
     "AT4K Dark",
@@ -145,6 +153,7 @@ mixin FLauncherGradients {
   }
 
   static List<FLauncherGradient> get all => [
+        couchDash,
         at4kDark,
         purpleGlow,
         trueBlack,

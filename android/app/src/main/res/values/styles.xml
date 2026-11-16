@@ -31,6 +31,7 @@
          
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+        <!-- CouchDash: dark, like the launch screen, so nothing flashes white before Flutter's first frame -->
+        <item name="android:windowBackground">#FF10141B</item>
     </style>
 </resources>

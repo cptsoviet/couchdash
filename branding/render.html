@@ -1,0 +1,58 @@
+<!doctype html>
+<!--
+  CouchDash branding masters (concept C "Home": a sofa under a roof, a nod to Home Assistant).
+  Rendered to the app's PNGs by render.js (headless Chromium): icon, TV banner, splash logo block.
+  Colours match the launcher: near-black gradient, white, the amber of active HA tiles.
+-->
+<html><head><meta charset="utf-8">
+<style>
+  @font-face { font-family: Inter; font-weight: 500; src: url(fonts/inter-latin-500-normal.woff2); }
+  @font-face { font-family: Inter; font-weight: 700; src: url(fonts/inter-latin-700-normal.woff2); }
+  body { margin: 0; background: transparent; }
+  .piece { display: block; margin: 0 0 20px; }
+</style></head>
+<body>
+<script>
+const WHITE = "#EEF1F6", AMBER = "#FFC85A", AMBER_DARK = "#E0A940", GREY = "#9AA4B2";
+
+// the mark in a 512 x 512 box: roof line over an amber sofa
+const mark = `
+  <polyline points="92,236 256,104 420,236" fill="none" stroke="${WHITE}" stroke-width="30"
+    stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(92 120) scale(0.64)">
+    <rect x="126" y="176" width="260" height="118" rx="38" fill="${AMBER}"/>
+    <rect x="86" y="236" width="72" height="124" rx="30" fill="${AMBER}"/>
+    <rect x="354" y="236" width="72" height="124" rx="30" fill="${AMBER}"/>
+    <rect x="140" y="282" width="232" height="70" rx="22" fill="${AMBER_DARK}"/>
+    <rect x="112" y="356" width="22" height="34" rx="8" fill="${AMBER_DARK}"/>
+    <rect x="378" y="356" width="22" height="34" rx="8" fill="${AMBER_DARK}"/>
+  </g>`;
+const gradient = (id) => `<linearGradient id="${id}" x1="0" y1="0" x2="0.35" y2="1">
+  <stop offset="0" stop-color="#232B3A"/><stop offset="1" stop-color="#10141B"/></linearGradient>`;
+
+// app icon: full-bleed rounded square (Android TV shows icons small; the banner is the main artwork)
+const icon = `<svg id="icon" class="piece" width="512" height="512" viewBox="0 0 512 512">
+  <defs>${gradient("g1")}</defs>
+  <rect width="512" height="512" rx="112" fill="url(#g1)"/>${mark}</svg>`;
+
+// TV banner 1280 x 720 (320 x 180 dp at 4x); no rounded corners, Android TV rounds banners itself
+const banner = `<svg id="banner" class="piece" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>${gradient("g2")}</defs>
+  <rect width="1280" height="720" fill="url(#g2)"/>
+  <g transform="translate(70 150) scale(0.82)">${mark}</g>
+  <text x="530" y="402" font-family="Inter" font-weight="700" font-size="118" fill="${WHITE}"
+    letter-spacing="-2">Couch<tspan fill="${AMBER}">Dash</tspan></text>
+</svg>`;
+
+// splash logo block, transparent, 1600 x 900 at 4x density (= 400 x 225 dp, centred on the launch screen)
+const splash = `<svg id="splash" class="piece" width="1600" height="900" viewBox="0 0 1600 900">
+  <g transform="translate(544 0) scale(1)">${mark}</g>
+  <text x="800" y="680" text-anchor="middle" font-family="Inter" font-weight="700" font-size="168"
+    fill="${WHITE}" letter-spacing="-3">Couch<tspan fill="${AMBER}">Dash</tspan></text>
+  <text x="800" y="820" text-anchor="middle" font-family="Inter" font-weight="500" font-size="72"
+    fill="${GREY}" letter-spacing="1">for Home Assistant</text>
+</svg>`;
+
+document.body.innerHTML = icon + banner + splash;
+</script>
+</body></html>

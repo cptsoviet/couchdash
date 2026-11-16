@@ -37,7 +37,7 @@ class WallpaperService extends ChangeNotifier {
 
   FLauncherGradient get gradient => FLauncherGradients.all.firstWhere(
         (gradient) => gradient.uuid == _settingsService.gradientUuid,
-        orElse: () => FLauncherGradients.at4kDark,
+        orElse: () => FLauncherGradients.couchDash, // nothing chosen yet (fresh install)
       );
 
   set settingsService(SettingsService settingsService) => _settingsService = settingsService;
