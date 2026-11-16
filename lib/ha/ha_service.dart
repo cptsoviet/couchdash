@@ -26,6 +26,13 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
   String dashboard = "tv-launcher";
 
   bool connected = false;
+  // CouchDash: right after boot the launcher starts ~30 s before the Shield has a network. Until the first
+  // connection: retry every 3 s (not the doubling backoff) and call it "connecting", not "offline".
+  bool everConnected = false;
+  final DateTime startedAt = DateTime.now();
+
+  /// still in the start-up grace period: not connected yet, but no reason to alarm anyone
+  bool get starting => !everConnected && DateTime.now().difference(startedAt) < Duration(seconds: 90);
   String? error;
   List<Map<String, dynamic>> cards = [];
   final Map<String, Map<String, dynamic>> states = {};
@@ -52,6 +59,8 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onKey);
     // re-evaluate time-based card visibility every minute
+    // end of the start-up grace period: "connecting" becomes "offline" if it still hasn't connected
+    Timer(Duration(seconds: 91), notifyListeners);
     _minuteTimer = Timer.periodic(Duration(minutes: 1), (_) {
       if (cards.any((c) => c["visibility"] != null)) notifyListeners();
       // keep the OAuth access token fresh for camera image headers (no-op for long-lived tokens)
@@ -125,6 +134,10 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
     _pending.clear();
     notifyListeners();
     _retryTimer?.cancel();
+    if (!everConnected) {
+      _retryTimer = Timer(Duration(seconds: 3), _connect); // waiting for the network after boot
+      return;
+    }
     _retryTimer = Timer(Duration(seconds: _backoffSeconds), _connect);
     _backoffSeconds = (_backoffSeconds * 2).clamp(2, 60);
   }
@@ -158,6 +171,7 @@ class HaService extends ChangeNotifier with WidgetsBindingObserver {
         break;
       case "auth_ok":
         _backoffSeconds = 2;
+        everConnected = true;
         error = null;
         connected = true;
         await _load();

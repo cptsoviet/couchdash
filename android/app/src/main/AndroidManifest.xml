@@ -28,6 +28,8 @@
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- kronie-ha fork: Home Assistant over the LAN (plain http to HA) -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- CouchDash: reconnect to HA the moment the network is up (after boot) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- HA notifications drawn over other apps (granted via adb appops), kept alive as a foreground service -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

@@ -57,7 +57,11 @@ class HaPanel extends StatelessWidget {
                 Padding(
                   padding: EdgeInsets.only(left: 8, bottom: 8),
                   child: Wrap(spacing: 10, runSpacing: 8, children: [
-                    if (!ha.connected) _Pill(text: ha.error ?? "Home Assistant offline", icon: Icons.cloud_off, iconColor: Colors.redAccent),
+                    if (!ha.connected)
+                      ha.starting && ha.error == null
+                          // CouchDash: just started (the network can take ~30 s after boot): not an outage yet
+                          ? _Pill(text: "Connecting to Home Assistant…", icon: Icons.cloud_sync_outlined)
+                          : _Pill(text: ha.error ?? "Home Assistant offline", icon: Icons.cloud_off, iconColor: Colors.redAccent),
                     for (final p in pills) _EntityPill(p),
                   ]),
                 ),

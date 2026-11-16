@@ -19,6 +19,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.Network
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -105,6 +107,7 @@ class HaNotifyService : Service() {
         }
         registerReceiver(screenOn, IntentFilter(Intent.ACTION_SCREEN_ON))
         registerReceiver(wake, IntentFilter(Intent.ACTION_DREAMING_STOPPED).apply { addAction(Intent.ACTION_SCREEN_ON) })
+        getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(network)
         Thread { setUp() }.start()
     }
 
@@ -121,6 +124,7 @@ class HaNotifyService : Service() {
         socket?.close(1000, null)
         unregisterReceiver(screenOn)
         unregisterReceiver(wake)
+        runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(network) }
         tts?.shutdown()
         overlay.clearAll()
         super.onDestroy()
@@ -152,7 +156,8 @@ class HaNotifyService : Service() {
         webhookId = if (l.token() != null) l.webhookId() else null
         if (webhookId == null) {
             Log.w(TAG, "login or registration failed; retrying in 60 s")
-            main.postDelayed({ Thread { setUp() }.start() }, 60_000)
+            setUpPending = true
+            main.postDelayed(retrySetUp, 60_000)
             return
         }
         main.postDelayed(refreshLoop, REFRESH_MS)
@@ -178,6 +183,7 @@ class HaNotifyService : Service() {
                 when (m.optString("type")) {
                     "auth_required" -> webSocket.send(JSONObject().put("type", "auth").put("access_token", link?.token()).toString())
                     "auth_ok" -> {
+                        socketOpen = true
                         backoffMs = 2_000L
                         webSocket.send(JSONObject().put("id", nextId++).put("type", "mobile_app/push_notification_channel")
                             .put("webhook_id", webhookId).put("support_confirm", true).toString())
@@ -199,9 +205,34 @@ class HaNotifyService : Service() {
         })
     }
 
+    // ---------- network up: don't wait out the retry timers (right after boot the network comes ~30 s late) ----------
+    private val retrySetUp = Runnable { setUpPending = false; Thread { setUp() }.start() }
+    private val reconnect = Runnable { reconnectPending = false; connect() }
+    @Volatile private var socketOpen = false
+    @Volatile private var setUpPending = false // a setUp retry is waiting (main thread only)
+    private var reconnectPending = false // a connect retry is waiting (main thread only)
+
+    private val network = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(n: Network) {
+            main.post {
+                if (stopped) return@post
+                if (setUpPending) { // setUp failed (no network yet): try again now
+                    main.removeCallbacks(retrySetUp)
+                    retrySetUp.run()
+                } else if (webhookId != null && !socketOpen && reconnectPending) {
+                    main.removeCallbacks(reconnect)
+                    backoffMs = 2_000L
+                    reconnect.run()
+                }
+            }
+        }
+    }
+
     private fun retry() {
         if (stopped) return
-        main.postDelayed({ connect() }, backoffMs)
+        socketOpen = false
+        reconnectPending = true
+        main.postDelayed(reconnect, backoffMs)
         backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
     }
 
